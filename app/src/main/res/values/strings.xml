@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">我的课表</string>
+    <string name="import_pdf_cta">导入 PDF 课表</string>
+</resources>

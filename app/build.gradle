@@ -1,0 +1,95 @@
+plugins {
+    id "com.android.application"
+}
+
+// Release signing credentials are resolved in this order:
+//   1. Environment variables (preferred for CI):
+//      MEIN_STORE_FILE, MEIN_STORE_PASSWORD, MEIN_KEY_ALIAS, MEIN_KEY_PASSWORD
+//   2. secrets/release-signing.properties in the project (git-ignored; see the .template)
+//   3. ~/.gradle/mein-stundenplan-signing.properties (user home, outside the repo)
+// When nothing resolves, the release build stays unsigned so that a fresh clone can
+// still run assembleRelease (it produces app-release-unsigned.apk).
+def signingProps = new Properties()
+[
+    rootProject.file("secrets/release-signing.properties"),
+    new File(System.getProperty("user.home"), ".gradle/mein-stundenplan-signing.properties")
+].each { File candidate ->
+    if (candidate.exists()) {
+        candidate.withInputStream { signingProps.load(it) }
+    }
+}
+
+def signingValue = { String envName, String propName ->
+    def envValue = System.getenv(envName)
+    if (envValue != null && !envValue.isEmpty()) {
+        return envValue
+    }
+    return signingProps.getProperty(propName)
+}
+
+def releaseStoreFile = signingValue("MEIN_STORE_FILE", "storeFile")
+def releaseStorePassword = signingValue("MEIN_STORE_PASSWORD", "storePassword")
+def releaseKeyAlias = signingValue("MEIN_KEY_ALIAS", "keyAlias")
+def releaseKeyPassword = signingValue("MEIN_KEY_PASSWORD", "keyPassword")
+def hasReleaseSigning = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+if (!hasReleaseSigning) {
+    logger.lifecycle("No release signing credentials resolved: assembleRelease will emit an unsigned APK.")
+}
+
+android {
+    namespace "com.example.meinstundenplan"
+    compileSdk {
+        version = release(36) {
+            it.minorApiLevel = 1
+        }
+    }
+    buildToolsVersion "36.1.0"
+
+    defaultConfig {
+        applicationId "com.example.meinstundenplan"
+        minSdk 23
+        targetSdk 36
+        versionCode 5
+        versionName "1.2.2"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    signingConfigs {
+        release {
+            if (hasReleaseSigning) {
+                storeFile rootProject.file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            buildConfigField "boolean", "ENABLE_TEST_COURSE", "true"
+        }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            debuggable false
+            buildConfigField "boolean", "ENABLE_TEST_COURSE", "false"
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+}
+
+dependencies {
+    implementation "com.google.android.material:material:1.12.0"
+}
