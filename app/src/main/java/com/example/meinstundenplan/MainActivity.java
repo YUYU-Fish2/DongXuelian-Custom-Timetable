@@ -3553,12 +3553,20 @@ public class MainActivity extends AppCompatActivity {
         return mixColor(color, cardColor(), isDarkMode ? 0.78f : 0.86f);
     }
 
+    /**
+     * 弹窗面板底色。
+     *
+     * 原来浅色用的是半透明白 argb(226,255,255,255)（约 89% 不透明），
+     * 结果背后 Dialog 窗口主题的紫色透了上来，实测面板渲成 #ECE6F0
+     * ——绿通道最低，是明显的紫粉调，和全 app 的蓝色体系割裂。
+     * 改成不透明的蓝白渐变，既杜绝透色，也和主屏的干净平面风一致。
+     */
     private int glassPanelTopColor() {
-        return isDarkMode ? Color.argb(228, 31, 36, 47) : Color.argb(226, 255, 255, 255);
+        return isDarkMode ? Color.rgb(31, 36, 47) : Color.rgb(255, 255, 255);
     }
 
     private int glassPanelBottomColor() {
-        return isDarkMode ? Color.argb(216, 21, 26, 35) : Color.argb(206, 245, 250, 255);
+        return isDarkMode ? Color.rgb(23, 27, 36) : Color.rgb(240, 246, 254);
     }
 
     private int glassRowColor() {
@@ -3593,7 +3601,23 @@ public class MainActivity extends AppCompatActivity {
         return Color.rgb(red, green, blue);
     }
 
+    /**
+     * 统一 AlertDialog 的窗口背景与按钮配色。
+     *
+     * 这些弹窗走的是 MaterialAlertDialogBuilder，底色来自**主题的 colorSurface**；
+     * 而本项目用的是 Material 3 默认调色板，colorSurface 自带紫色调 ——
+     * 实测浅色 #ECE6F0、深色 #2B2930，两者**绿通道都最低**，是明显的紫粉调，
+     * 和全 app 的蓝白体系割裂。
+     *
+     * 这里直接覆盖窗口背景为项目自己的面板样式，不去改主题本身：
+     * 改主题会连带影响所有 Material 组件的默认取色，波及面比这大得多。
+     * 一处修改覆盖全部 7 个 AlertDialog（课程编辑／周次选择／临时周／主题色／
+     * 节次设置／节次规则／校历导入）。
+     */
     private void styleDialogWindow(AlertDialog dialog) {
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(glassPanelBackground(dp(24)));
+        }
         Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
         if (positive != null) {
             positive.setTextColor(accentColor());
