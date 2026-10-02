@@ -17,6 +17,22 @@ final class R {
         static final int ic_palette_outline = 13;
         static final int ic_sun_outline = 14;
         static final int ic_moon_outline = 15;
+        static final int hero_character = 16;
+        static final int art_math = 17;
+        static final int art_data = 18;
+        static final int art_computer = 19;
+        static final int art_english = 20;
+        static final int ic_sparkle = 21;
+        static final int ic_location = 22;
+        static final int ic_person = 23;
+        static final int ic_warning = 24;
+        static final int empty_art = 25;
+        static final int hero_ambient = 26;
+        static final int deco_petal = 27;
+        static final int deco_leaf = 28;
+        static final int deco_star = 29;
+        static final int deco_cloud = 30;
+        static final int ic_pointer = 31;
     }
 
     static final class string {

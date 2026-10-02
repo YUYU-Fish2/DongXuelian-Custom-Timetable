@@ -76,7 +76,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String ACCENT_KEY = "accent_preset";
     private static final int DEFAULT_ACCENT_PRESET = 0;
     private static final int[][] ACCENT_PRESETS = {
-            {0xFF1E68D2, 0xFF69B2FF}, // blue (default)
+            {0xFF4C63D9, 0xFF7895E8}, // blue (default) — brief 指定主品牌色 Primary Blue
             {0xFF0E9F8A, 0xFF4FD1BC}, // teal
             {0xFF2E9E44, 0xFF6FD08A}, // green
             {0xFF7A4FE0, 0xFFB59AFF}, // purple
@@ -108,6 +108,59 @@ public class MainActivity extends AppCompatActivity {
     private static final long MILLIS_PER_DAY = 24L * 60L * 60L * 1000L;
     private static final long MILLIS_PER_WEEK = 7L * MILLIS_PER_DAY;
     private static final int CONTENT_SIDE_MARGIN_DP = 28;
+    // Hero 区角色插画。置 false 即回到"无人物版"：去掉人物后版式依然完整可编译。
+    private static final boolean SHOW_HERO_CHARACTER = true;
+    // Hero 高度硬上限：不超过屏高的 22%，避免压缩课表可视空间。
+    private static final int HERO_CHARACTER_MAX_HEIGHT_DP = 174;
+    // hero_character.png 的固有宽高比（1100 x 1006）。
+    private static final float HERO_CHARACTER_ASPECT = 1006f / 1100f;
+    // 课程卡片右下角小插画的透明度。照效果图量出来约 25%~35%，取偏保守的下沿，
+    // 因为真机卡片比效果图窄，插画占比更大会压到文字。
+    private static final float COURSE_ART_ALPHA = 0.34f;
+
+    // ─────────────────────────────────────────────────────────────────────
+    // 设计 token（brief §1 / §10）。统一收在这里，不要再往 buildLayout 里散写常量。
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** 背景三段竖直渐变（brief §1 给了很浅的底色，但实测整屏偏灰发淡，按效果图加了蓝度）。 */
+    private static final int PAGE_TOP_LIGHT = 0xFFEDF4FE;
+    private static final int PAGE_MID_LIGHT = 0xFFF4F8FE;
+    private static final int PAGE_BOTTOM_LIGHT = 0xFFF8FAFF;
+
+    /** 圆角（brief §10）：主要卡片 16dp、按钮 16~20dp、胶囊全圆、小标签 10~12dp。 */
+    private static final int RADIUS_CARD = 16;
+    private static final int RADIUS_BUTTON = 20;
+    private static final int RADIUS_TAG = 12;
+
+    /** 间距基数（brief §1：4 / 8 / 16 / 24）。 */
+    private static final int SPACE_XS = 4;
+    private static final int SPACE_S = 8;
+    private static final int SPACE_M = 16;
+    private static final int SPACE_L = 24;
+
+    /**
+     * 柔和阴影的高程。
+     *
+     * brief §10 要求 {@code 0 4px 20px rgba(80,100,150,0.06)} —— 一个带蓝灰色调的极淡投影。
+     * Android 的 elevation 阴影由系统按光源生成、**颜色不可指定**（永远是黑色系），
+     * 因此无法精确还原这个"染色柔光"。这里用 2dp 高程 + 1dp 细描边近似，
+     * 视觉上同为"浅色纸上浮起的卡片"，且没有滚动性能代价。
+     * 如需严格还原色值，只能改用软件层 + setShadowLayer，会在列表滚动时掉帧。
+     */
+    private static final int ELEVATION_SOFT = 2;
+
+    /** 装饰透明度区间（brief §8）：页面装饰 5%~20%，卡片插画 8%~15%。 */
+    private static final float DECOR_ALPHA_MIN = 0.05f;
+    private static final float DECOR_ALPHA_MAX = 0.20f;
+
+    /** 顶部动作圆钮直径。brief 未给数值，按示意图取 42dp；做正圆时半径取其一半。 */
+    private static final int ACTION_BUTTON_SIZE_DP = 42;
+
+    /**
+     * 时间轴 gutter 中圆点的纵向基准（时间文字高度 + 间距）。
+     * 首行竖线要从这里起、末行竖线要在这里收，否则线会多出或缺少一截。
+     */
+    private static final int TIMELINE_DOT_TOP_DP = 20;
     private static final int REQUEST_POST_NOTIFICATIONS = 61;
     private static final int LONG_CLASS_REMINDER_MINUTES = 30;
     private static final int SHORT_CLASS_REMINDER_MINUTES = 10;
@@ -172,7 +225,14 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout dayTabs;
     private LinearLayout courseList;
     private TextView summaryText;
-    private TextView statusChip;
+    // 「下一节」胶囊（brief §7 三层）：容器 + 四段子视图
+    private LinearLayout statusChip;
+    private android.widget.ImageView statusChipIcon;
+    private TextView statusChipLabel;
+    private TextView statusChipName;
+    private LinearLayout statusChipMetaRow;
+    private android.widget.ImageView statusChipMetaIcon;
+    private TextView statusChipMeta;
     private ImageButton themeToggle;
     private View settingsOverlay;
     private int selectedDay = 0;
@@ -668,7 +728,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void configureWindow() {
         Window window = getWindow();
-        int bgColor = bgColor();
+        int bgColor = pageTopColor();
         window.setStatusBarColor(bgColor);
         window.setNavigationBarColor(bgColor);
         if (isDarkMode) {
@@ -682,12 +742,137 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Hero 氛围层：极淡的云 / 飘落花瓣 / 植物底图 + 角色背后的柔光晕（brief §3）。
+     *
+     * 底图**不做抠图**——云本身就是白的，与白底无法区分，键控会把云一起吃掉。
+     * 改为保留白底、整体压到 22%：白色叠在 #F5F8FD 页面上只差约 2/255（看不出边界），
+     * 而云和花瓣会作为很淡的纹理透出来。素材四周已做羽化，不会出现矩形硬边。
+     */
+    private void addHeroAmbient(FrameLayout safeFrame, boolean compact) {
+        float density = getResources().getDisplayMetrics().density;
+        int screenWidthDp = Math.round(getResources().getDisplayMetrics().widthPixels / density);
+        int screenHeightDp = Math.round(getResources().getDisplayMetrics().heightPixels / density);
+        int heroHeightDp = Math.min(Math.round(screenHeightDp * 0.22f), HERO_CHARACTER_MAX_HEIGHT_DP);
+
+        android.widget.ImageView ambient = new android.widget.ImageView(this);
+        ambient.setImageResource(R.drawable.hero_ambient);
+        ambient.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+        ambient.setAlpha(0.55f);
+        ambient.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        safeFrame.addView(ambient, new FrameLayout.LayoutParams(
+                dp(Math.round(screenWidthDp * 0.94f)),
+                dp(Math.round(heroHeightDp * 1.3f)),
+                Gravity.TOP | Gravity.END));
+
+        // Hero 顶部天空底色。效果图整个 Hero 区是明显偏蓝的（实测顶部 #F2F7FE），
+        // 纯白背景会让整屏显得发灰、发淡。这里用**代码渐变**（不是手绘插画）从淡蓝过渡到透明，
+        // 让顶部亮起来，同时把下面的课程卡片衬得更清楚。
+        View sky = new View(this);
+        sky.setBackground(new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{
+                        isDarkMode ? 0xFF151B26 : 0xFFDCEAFD,
+                        isDarkMode ? 0x00151B26 : 0x00DCEAFD
+                }));
+        sky.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        safeFrame.addView(sky, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(Math.round(heroHeightDp * 1.95f)),
+                Gravity.TOP));
+
+        // 角色背后的淡圆形渐变光晕：纯代码绘制，不烘进角色图，便于跟随主题色
+        int glowSizeDp = Math.round(heroReservedWidthDp(compact) * 1.7f);
+        View glow = new View(this);
+        GradientDrawable glowDrawable = new GradientDrawable();
+        glowDrawable.setShape(GradientDrawable.OVAL);
+        glowDrawable.setGradientType(GradientDrawable.RADIAL_GRADIENT);
+        glowDrawable.setGradientRadius(dp(glowSizeDp / 2));
+        glowDrawable.setColors(new int[]{
+                withAlpha(accentColor(), isDarkMode ? 56 : 32),
+                Color.TRANSPARENT
+        });
+        glow.setBackground(glowDrawable);
+        glow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        FrameLayout.LayoutParams glowParams = new FrameLayout.LayoutParams(
+                dp(glowSizeDp), dp(glowSizeDp), Gravity.TOP | Gravity.END);
+        glowParams.topMargin = dp(Math.round(heroHeightDp * 0.05f));
+        safeFrame.addView(glow, glowParams);
+    }
+
+    /**
+     * 页面装饰（brief §8）：透明度 5%~20%，只贴边缘，不进入文字区，不做成满屏贴纸。
+     * 都加在滚动容器之前，所以课程卡片始终压在它们上面，装饰不会影响任何课程信息。
+     */
+    private void addPageDecorations(FrameLayout safeFrame) {
+        addDecoration(safeFrame, R.drawable.deco_star,
+                Gravity.TOP | Gravity.START, 24, 104, 10, 0.13f);
+        addDecoration(safeFrame, R.drawable.deco_petal,
+                Gravity.BOTTOM | Gravity.START, 34, 104, 18, 0.10f);
+        addDecoration(safeFrame, R.drawable.deco_leaf,
+                Gravity.BOTTOM | Gravity.START, 46, 26, 8, 0.12f);
+        addDecoration(safeFrame, R.drawable.deco_cloud,
+                Gravity.BOTTOM | Gravity.END, 66, 40, 6, 0.10f);
+    }
+
+    /** 放一个纯装饰小图。四个方向都设 margin，实际由 gravity 决定用哪几个。 */
+    private void addDecoration(FrameLayout parent, int resId, int gravity,
+                               int sizeDp, int verticalMarginDp, int horizontalMarginDp, float alpha) {
+        android.widget.ImageView view = new android.widget.ImageView(this);
+        view.setImageResource(resId);
+        view.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        view.setAlpha(alpha);
+        view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(sizeDp), dp(sizeDp), gravity);
+        params.topMargin = dp(verticalMarginDp);
+        params.bottomMargin = dp(verticalMarginDp);
+        params.leftMargin = dp(horizontalMarginDp);
+        params.rightMargin = dp(horizontalMarginDp);
+        parent.addView(view, params);
+    }
+
+    /**
+     * Hero 区角色插画（陪伴型视觉元素，不遮挡任何课程信息）。
+     *
+     * 素材在落库前已经做过边缘羽化——白底向页面底色渐隐，所以这里不做抠图、不加背景。
+     * 只负责：按 brief 把宽度控制在屏宽 35%~45%，并让高度受屏高 22% 与硬上限约束，
+     * 保证加入人物后不会压缩课表可视空间。
+     */
+    private void addHeroCharacter(FrameLayout safeFrame, boolean compact) {
+        float density = getResources().getDisplayMetrics().density;
+        int screenHeightDp = Math.round(getResources().getDisplayMetrics().heightPixels / density);
+
+        int widthDp = heroReservedWidthDp(compact);
+        int heightDp = Math.round(widthDp * HERO_CHARACTER_ASPECT);
+
+        // hero 高度上限：屏高 22% 与 HERO_CHARACTER_MAX_HEIGHT_DP 取小
+        int maxHeightDp = Math.min(Math.round(screenHeightDp * 0.22f), HERO_CHARACTER_MAX_HEIGHT_DP);
+        if (heightDp > maxHeightDp) {
+            heightDp = maxHeightDp;
+            widthDp = Math.round(heightDp / HERO_CHARACTER_ASPECT);
+        }
+
+        android.widget.ImageView heroCharacter = new android.widget.ImageView(this);
+        heroCharacter.setImageResource(R.drawable.hero_character);
+        heroCharacter.setScaleType(android.widget.ImageView.ScaleType.FIT_START);
+        heroCharacter.setAdjustViewBounds(false);
+        // 纯装饰，不参与无障碍朗读
+        heroCharacter.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                dp(widthDp),
+                dp(heightDp),
+                Gravity.TOP | Gravity.END
+        );
+        safeFrame.addView(heroCharacter, params);
+    }
+
     private void buildLayout() {
         boolean compact = isCompactWidth();
         int sideMargin = contentSideMarginDp();
-        int actionButtonSize = 48;
+        int actionButtonSize = ACTION_BUTTON_SIZE_DP;
         FrameLayout safeFrame = new FrameLayout(this);
-        safeFrame.setBackgroundColor(bgColor());
+        safeFrame.setBackground(pageBackground());
         safeFrame.setClipChildren(true);
         safeFrame.setClipToPadding(true);
         safeFrame.setOnApplyWindowInsetsListener((view, insets) -> {
@@ -696,6 +881,13 @@ public class MainActivity extends AppCompatActivity {
             view.setPadding(horizontalPadding, applied.getSystemWindowInsetTop() + dp(16), horizontalPadding, applied.getSystemWindowInsetBottom() + dp(16));
             return insets;
         });
+
+        // Hero 氛围层 + 角色插画：都加在滚动容器之前，因此渲染在内容下层。
+        if (SHOW_HERO_CHARACTER) {
+            addHeroAmbient(safeFrame, compact);
+            addHeroCharacter(safeFrame, compact);
+        }
+        addPageDecorations(safeFrame);
 
         ScrollView pageScroll = new ScrollView(this);
         pageScroll.setFillViewport(true);
@@ -735,13 +927,28 @@ public class MainActivity extends AppCompatActivity {
                 : new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         header.addView(titleBlock, titleBlockParams);
 
+        // 效果图标题前有一个小花标（纯氛围，不承载任何功能信息）
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        android.widget.ImageView titleFlower = new android.widget.ImageView(this);
+        titleFlower.setImageResource(R.drawable.deco_petal);
+        titleFlower.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        titleFlower.setAlpha(0.6f);
+        titleFlower.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams titleFlowerParams = new LinearLayout.LayoutParams(dp(23), dp(23));
+        titleFlowerParams.setMargins(0, 0, dp(6), 0);
+        titleRow.addView(titleFlower, titleFlowerParams);
+
         TextView title = new TextView(this);
         title.setText("我的课表");
         title.setTextColor(primaryTextColor());
         title.setTextSize(compact ? 28 : 32);
         title.setTypeface(appTypeface(Typeface.BOLD));
         title.setLetterSpacing(0f);
-        titleBlock.addView(title);
+        titleRow.addView(title);
+        titleBlock.addView(titleRow);
 
         summaryText = new TextView(this);
         summaryText.setTextColor(secondaryTextColor());
@@ -757,19 +964,87 @@ public class MainActivity extends AppCompatActivity {
         summaryParams.setMargins(0, dp(4), 0, 0);
         titleBlock.addView(summaryText, summaryParams);
 
-        statusChip = new TextView(this);
-        statusChip.setTextSize(13);
-        statusChip.setTypeface(appTypeface(Typeface.BOLD));
-        statusChip.setSingleLine(true);
-        statusChip.setEllipsize(TextUtils.TruncateAt.END);
-        statusChip.setIncludeFontPadding(false);
-        statusChip.setGravity(Gravity.CENTER);
-        statusChip.setPadding(dp(12), dp(5), dp(12), dp(5));
+        // 「下一节」胶囊（brief §7 三层）：图标 + 标签 / 课程名 / 时间 · 教室。
+        // 视觉权重刻意低于上方标题；compact 下右侧留出角色宽度，避免压到人物。
+        statusChip = new LinearLayout(this);
+        statusChip.setOrientation(LinearLayout.VERTICAL);
+        statusChip.setPadding(dp(14), dp(10), dp(16), dp(11));
+
+        LinearLayout chipLabelRow = new LinearLayout(this);
+        chipLabelRow.setOrientation(LinearLayout.HORIZONTAL);
+        chipLabelRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        statusChipIcon = new android.widget.ImageView(this);
+        statusChipIcon.setImageResource(R.drawable.ic_sparkle);
+        statusChipIcon.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        statusChipIcon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams chipIconParams = new LinearLayout.LayoutParams(dp(13), dp(13));
+        chipIconParams.setMargins(0, 0, dp(6), 0);
+        chipLabelRow.addView(statusChipIcon, chipIconParams);
+
+        statusChipLabel = new TextView(this);
+        statusChipLabel.setTextSize(12);
+        statusChipLabel.setTypeface(appTypefaceMedium());
+        statusChipLabel.setIncludeFontPadding(false);
+        statusChipLabel.setSingleLine(true);
+        chipLabelRow.addView(statusChipLabel);
+
+        // 效果图第一行是「图标 下一节 …… 14:30 - 16:10 ›」：
+        // 用一条 weight 撑开中间，把时间和右箭头推到行尾，而不是像原来那样各占一行。
+        View chipSpacer = new View(this);
+        chipLabelRow.addView(chipSpacer, new LinearLayout.LayoutParams(0, 1, 1f));
+
+        statusChipMetaRow = new LinearLayout(this);
+        statusChipMetaRow.setOrientation(LinearLayout.HORIZONTAL);
+        statusChipMetaRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        statusChipMetaIcon = new android.widget.ImageView(this);
+        statusChipMetaIcon.setImageResource(R.drawable.ic_clock_outline);
+        statusChipMetaIcon.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        statusChipMetaIcon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams chipMetaIconParams = new LinearLayout.LayoutParams(dp(12), dp(12));
+        chipMetaIconParams.setMargins(0, 0, dp(4), 0);
+        statusChipMetaRow.addView(statusChipMetaIcon, chipMetaIconParams);
+
+        statusChipMeta = new TextView(this);
+        statusChipMeta.setTextSize(12);
+        statusChipMeta.setTypeface(appTypefaceMedium());
+        statusChipMeta.setIncludeFontPadding(false);
+        statusChipMeta.setSingleLine(true);
+        statusChipMeta.setEllipsize(TextUtils.TruncateAt.END);
+        statusChipMetaRow.addView(statusChipMeta);
+        chipLabelRow.addView(statusChipMetaRow);
+
+        android.widget.ImageView chipChevron = new android.widget.ImageView(this);
+        chipChevron.setImageResource(R.drawable.ic_pointer);
+        chipChevron.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        chipChevron.setImageTintList(ColorStateList.valueOf(secondaryTextColor()));
+        chipChevron.setAlpha(0.7f);
+        chipChevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams chipChevronParams = new LinearLayout.LayoutParams(dp(9), dp(9));
+        chipChevronParams.setMargins(dp(6), 0, 0, 0);
+        chipLabelRow.addView(chipChevron, chipChevronParams);
+
+        statusChip.addView(chipLabelRow);
+
+        statusChipName = new TextView(this);
+        statusChipName.setTextSize(compact ? 15 : 16);
+        statusChipName.setTypeface(appTypefaceSemiBold());
+        statusChipName.setIncludeFontPadding(false);
+        statusChipName.setSingleLine(true);
+        statusChipName.setEllipsize(TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams chipNameParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        chipNameParams.setMargins(0, dp(5), 0, 0);
+        statusChip.addView(statusChipName, chipNameParams);
+
+        int chipRightReserve = SHOW_HERO_CHARACTER && compact
+                ? Math.max(0, heroReservedWidthDp(true) - sideMargin) : 0;
         LinearLayout.LayoutParams chipParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
+                compact ? ViewGroup.LayoutParams.MATCH_PARENT : ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
-        chipParams.setMargins(0, dp(8), 0, 0);
+        chipParams.setMargins(0, dp(10), dp(chipRightReserve), 0);
         titleBlock.addView(statusChip, chipParams);
 
         LinearLayout actions = new LinearLayout(this);
@@ -789,7 +1064,9 @@ public class MainActivity extends AppCompatActivity {
         themeToggle.setImageTintList(ColorStateList.valueOf(accentColor()));
         themeToggle.setScaleType(android.widget.ImageView.ScaleType.CENTER);
         themeToggle.setContentDescription(isDarkMode ? "切换到亮色模式" : "切换到暗黑模式");
-        themeToggle.setBackground(interactiveSurfaceBackground(cardColor(), dp(22)));
+        // 白底 + 1dp 细描边 + 轻阴影，和周次箭头、卡片 ••• 统一成同一种语言
+        themeToggle.setBackground(elevatedCardBackground(cardColor(), dp(ACTION_BUTTON_SIZE_DP / 2)));
+        themeToggle.setElevation(dp(ELEVATION_SOFT));
         themeToggle.setPadding(dp(10), dp(10), dp(10), dp(10));
         themeToggle.setOnClickListener(view -> toggleTheme());
         LinearLayout.LayoutParams themeParams = new LinearLayout.LayoutParams(dp(actionButtonSize), dp(actionButtonSize));
@@ -801,7 +1078,8 @@ public class MainActivity extends AppCompatActivity {
         settingsButton.setImageTintList(ColorStateList.valueOf(accentColor()));
         settingsButton.setScaleType(android.widget.ImageView.ScaleType.CENTER);
         settingsButton.setContentDescription("\u8bbe\u7f6e");
-        settingsButton.setBackground(interactiveSurfaceBackground(cardColor(), dp(22)));
+        settingsButton.setBackground(elevatedCardBackground(cardColor(), dp(ACTION_BUTTON_SIZE_DP / 2)));
+        settingsButton.setElevation(dp(ELEVATION_SOFT));
         settingsButton.setPadding(dp(11), dp(11), dp(11), dp(11));
         settingsButton.setOnClickListener(view -> showSettingsDialogV2());
         LinearLayout.LayoutParams settingsParams = new LinearLayout.LayoutParams(dp(actionButtonSize), dp(actionButtonSize));
@@ -813,7 +1091,9 @@ public class MainActivity extends AppCompatActivity {
         addButton.setImageTintList(ColorStateList.valueOf(Color.WHITE));
         addButton.setScaleType(android.widget.ImageView.ScaleType.CENTER);
         addButton.setContentDescription("\u6dfb\u52a0\u8bfe\u7a0b");
-        addButton.setBackground(interactiveButtonBackground(accentColor(), dp(22)));
+        // 「＋」保持主色实心（示意图里它是唯一的实心钮，承担"主操作"）
+        addButton.setBackground(interactiveButtonBackground(accentColor(), dp(ACTION_BUTTON_SIZE_DP / 2)));
+        addButton.setElevation(dp(ELEVATION_SOFT));
         addButton.setPadding(dp(11), dp(11), dp(11), dp(11));
         addButton.setOnClickListener(view -> showCourseDialog(null));
         actions.addView(addButton, new LinearLayout.LayoutParams(dp(actionButtonSize), dp(actionButtonSize)));
@@ -835,7 +1115,9 @@ public class MainActivity extends AppCompatActivity {
         weekPrevButton.setImageTintList(ColorStateList.valueOf(accentColor()));
         weekPrevButton.setScaleType(android.widget.ImageView.ScaleType.CENTER);
         weekPrevButton.setContentDescription("上一周");
-        weekPrevButton.setBackground(interactiveSurfaceBackground(cardColor(), dp(12)));
+        // brief §5：箭头做成"白底 + 细描边 + 轻阴影"的小圆角块
+        weekPrevButton.setBackground(elevatedCardBackground(cardColor(), dp(14)));
+        weekPrevButton.setElevation(dp(ELEVATION_SOFT));
         weekPrevButton.setPadding(dp(9), dp(9), dp(9), dp(9));
         weekPrevButton.setOnClickListener(view -> stepViewingWeek(-1));
         LinearLayout.LayoutParams weekPrevParams = new LinearLayout.LayoutParams(dp(36), dp(36));
@@ -851,7 +1133,7 @@ public class MainActivity extends AppCompatActivity {
         weekRangeText.setEllipsize(TextUtils.TruncateAt.END);
         weekRangeText.setIncludeFontPadding(false);
         weekRangeText.setPadding(dp(8), dp(9), dp(8), dp(9));
-        weekRangeText.setBackground(interactiveSurfaceBackground(segmentedTrackColor(), dp(14)));
+        weekRangeText.setBackground(interactiveSurfaceBackground(tonalContainerColor(), dp(14)));
         weekRangeText.setContentDescription("选择周次");
         weekRangeText.setOnClickListener(view -> showWeekPickerDialog());
         weekNavRow.addView(weekRangeText, new LinearLayout.LayoutParams(
@@ -863,7 +1145,8 @@ public class MainActivity extends AppCompatActivity {
         weekNextButton.setImageTintList(ColorStateList.valueOf(accentColor()));
         weekNextButton.setScaleType(android.widget.ImageView.ScaleType.CENTER);
         weekNextButton.setContentDescription("下一周");
-        weekNextButton.setBackground(interactiveSurfaceBackground(cardColor(), dp(12)));
+        weekNextButton.setBackground(elevatedCardBackground(cardColor(), dp(14)));
+        weekNextButton.setElevation(dp(ELEVATION_SOFT));
         weekNextButton.setPadding(dp(9), dp(9), dp(9), dp(9));
         weekNextButton.setOnClickListener(view -> stepViewingWeek(1));
         LinearLayout.LayoutParams weekNextParams = new LinearLayout.LayoutParams(dp(36), dp(36));
@@ -901,7 +1184,8 @@ public class MainActivity extends AppCompatActivity {
         dayTabFrame.setPadding(dp(4), dp(4), dp(4), dp(4));
         dayTabFrame.setClipChildren(false);
         dayTabFrame.setClipToPadding(false);
-        dayTabFrame.setBackground(elevatedCardBackground(segmentedTrackColor(), dp(24)));
+        // brief §6：日期条不再要整条灰色 track，标签直接落在页面背景上
+        dayTabFrame.setBackground(null);
         dayScroll.addView(dayTabFrame);
 
         daySelectionSlider = new View(this);
@@ -944,22 +1228,6 @@ public class MainActivity extends AppCompatActivity {
         Course currentCourse = viewingWeek == 0 ? currentCourseInProgress() : null;
         SummaryCourse nextCourse = currentCourse == null && viewingWeek == 0
                 ? nextUpcomingCourseFromToday() : null;
-        String statusText;
-        if (currentCourse != null) {
-            statusText = "正在上 " + currentCourse.periodLabel() + " " + currentCourse.name;
-        } else if (nextCourse != null) {
-            String dayPrefix;
-            boolean occursToday = startOfDayMillis(nextCourse.startAtMillis) == startOfTodayMillis();
-            if (occursToday) {
-                dayPrefix = selectedDay == today ? "" : "\u4eca\u5929 ";
-            } else {
-                dayPrefix = DAYS[nextCourse.day] + " ";
-            }
-            statusText = "\u4e0b\u4e00\u8282 " + dayPrefix
-                    + nextCourse.course.periodLabel() + " " + nextCourse.course.name;
-        } else {
-            statusText = "\u6682\u65e0\u540e\u7eed\u8bfe\u7a0b";
-        }
         int realWeek = currentTeachingWeek();
         String weekText;
         if (viewingWeek != 0) {
@@ -979,38 +1247,81 @@ public class MainActivity extends AppCompatActivity {
                 count
         ));
         if (viewingWeek != 0) {
-            updateStatusChip("预览模式 · 点按回到本周", true);
+            updateStatusChip(null, null, true);
         } else {
-            updateStatusChip(currentCourse != null || nextCourse != null ? statusText : null, false);
+            updateStatusChip(currentCourse, nextCourse, false);
         }
         renderedTemporalSignature = temporalSignature();
     }
 
-    private void updateStatusChip(String statusText, boolean previewMode) {
+    /**
+     * 「下一节」胶囊：三态（正在上课 / 下一节 / 暂无后续课程）+ 预览态。
+     *
+     * 四态共用同一版式，只换文案与配色浓淡，保证看起来始终是同一个组件。
+     * 数据完全来自 currentCourseInProgress() / nextUpcomingCourseFromToday()，不新增业务逻辑。
+     */
+    private void updateStatusChip(Course current, SummaryCourse next, boolean previewMode) {
         if (statusChip == null) {
             return;
         }
+        Course shown = current != null ? current : (next != null ? next.course : null);
+        boolean ongoing = current != null;
+        boolean hasCourse = shown != null;
+
+        String label;
         if (previewMode) {
-            statusChip.setText(statusText);
-            statusChip.setBackground(buttonBackground(tonalContainerColor(), dp(100)));
-            statusChip.setTextColor(accentColor());
-            statusChip.setOnClickListener(view -> returnToCurrentWeek());
-            return;
-        }
-        boolean hasStatus = statusText != null && !statusText.isEmpty();
-        statusChip.setText(hasStatus ? statusText : "\u6682\u65e0\u540e\u7eed\u8bfe\u7a0b");
-        int chipBg;
-        int chipFg;
-        if (hasStatus) {
-            chipBg = accentContainerColor();
-            chipFg = accentColor();
+            label = "预览模式 · 点按回到本周";
+        } else if (ongoing) {
+            label = "正在上课";
+        } else if (hasCourse) {
+            // 不是今天的课就把星期带在标签上，否则只看时间会误以为是今天
+            label = next != null && next.day != currentSchoolDay()
+                    ? "下一节 · " + DAYS[next.day]
+                    : "下一节";
         } else {
-            chipBg = withAlpha(secondaryTextColor(), isDarkMode ? 44 : 22);
-            chipFg = secondaryTextColor();
+            label = "暂无后续课程";
         }
-        statusChip.setBackground(buttonBackground(chipBg, dp(100)));
-        statusChip.setTextColor(chipFg);
-        statusChip.setOnClickListener(null);
+        statusChipLabel.setText(label);
+
+        boolean showDetail = hasCourse && !previewMode;
+        if (showDetail) {
+            statusChipName.setText(shown.name);
+            // 效果图第一行是「下一节 …… 14:30 - 16:10 ›」：只放时间范围。
+            // 原来还塞了教室，结果这一行被截成「当前:...」，箭头也被挤没了。
+            statusChipMeta.setText(periodRangeTime(shown));
+            statusChipName.setVisibility(View.VISIBLE);
+            statusChipMetaRow.setVisibility(View.VISIBLE);
+        } else {
+            statusChipName.setVisibility(View.GONE);
+            statusChipMetaRow.setVisibility(View.GONE);
+        }
+
+        // 配色：预览/正在上课最重，普通「下一节」更淡，「暂无」整体弱化成灰
+        int tint;
+        float amount;
+        if (previewMode || ongoing) {
+            tint = accentColor();
+            amount = isDarkMode ? 0.30f : 0.13f;
+        } else if (hasCourse) {
+            tint = accentColor();
+            amount = isDarkMode ? 0.20f : 0.06f;
+        } else {
+            tint = secondaryTextColor();
+            amount = isDarkMode ? 0.16f : 0.05f;
+        }
+        statusChip.setBackground(verticalGradientBackground(
+                mixColor(cardColor(), tint, amount),
+                mixColor(cardColor(), tint, Math.min(0.9f, amount * 2.4f)),
+                dp(18)));
+
+        int labelColor = hasCourse ? accentColor() : secondaryTextColor();
+        statusChipLabel.setTextColor(labelColor);
+        statusChipIcon.setImageTintList(ColorStateList.valueOf(labelColor));
+        statusChipName.setTextColor(ongoing ? accentColor() : primaryTextColor());
+        int metaColor = ongoing ? accentColor() : secondaryTextColor();
+        statusChipMeta.setTextColor(metaColor);
+        statusChipMetaIcon.setImageTintList(ColorStateList.valueOf(metaColor));
+        statusChip.setOnClickListener(previewMode ? view -> returnToCurrentWeek() : null);
     }
 
     private int totalCalendarWeeks() {
@@ -1076,7 +1387,7 @@ public class MainActivity extends AppCompatActivity {
         weekRangeText.setText(weekRangeLabel(week));
         weekRangeText.setTextColor(previewing ? accentColor() : primaryTextColor());
         weekRangeText.setBackground(interactiveSurfaceBackground(
-                previewing ? tonalContainerColor() : segmentedTrackColor(), dp(14)));
+                previewing ? accentContainerColor() : tonalContainerColor(), dp(14)));
         boolean canPrev = week > 1;
         boolean canNext = week < total;
         weekPrevButton.setEnabled(canPrev);
@@ -1380,7 +1691,8 @@ public class MainActivity extends AppCompatActivity {
         params.width = selectedTab.getWidth();
         params.height = selectedTab.getHeight();
         daySelectionSlider.setLayoutParams(params);
-        daySelectionSlider.setBackground(elevatedCardBackground(tonalContainerColor(), dp(20)));
+        // brief §6：选中态是"浅蓝紫药丸 + 蓝字 + 下方圆点"，不要描边
+        daySelectionSlider.setBackground(roundedSurface(tonalContainerColor(), dp(20), Color.TRANSPARENT));
 
         float target = selectedTab.getLeft();
         daySelectionSlider.animate().cancel();
@@ -1426,10 +1738,18 @@ public class MainActivity extends AppCompatActivity {
         List<Course> dayCourses = new ArrayList<>();
         if (storageLocked) {
             TextView warning = new TextView(this);
-            warning.setText("⚠️ 加密课表无法读取\n\n为避免覆盖原数据，已暂停保存。\n请检查系统密钥或清除应用数据后重新开始。");
+            warning.setText("加密课表无法读取\n\n为避免覆盖原数据，已暂停保存。\n请检查系统密钥或清除应用数据后重新开始。");
             warning.setTextSize(15);
             warning.setTextColor(dangerColor());
             warning.setGravity(Gravity.CENTER);
+            // brief：全项目不使用 emoji。原来这里是一个警示 emoji，现改用矢量图标，置于文字上方并跟随危险色。
+            android.graphics.drawable.Drawable warningIcon = getDrawable(R.drawable.ic_warning);
+            if (warningIcon != null) {
+                warningIcon.setTint(dangerColor());
+                warningIcon.setBounds(0, 0, dp(30), dp(30));
+                warning.setCompoundDrawables(null, warningIcon, null, null);
+                warning.setCompoundDrawablePadding(dp(14));
+            }
             warning.setBackground(elevatedCardBackground(dangerContainerColor(), dp(16)));
             warning.setPadding(dp(24), dp(32), dp(24), dp(32));
             warning.setLineSpacing(dp(4), 1.0f);
@@ -1462,11 +1782,11 @@ public class MainActivity extends AppCompatActivity {
         if (dayCourses.isEmpty()) {
             MaterialCardView emptyState = new MaterialCardView(this);
             emptyState.setCardBackgroundColor(cardColor());
-            emptyState.setCardElevation(dp(1));
-            emptyState.setRadius(dp(24));
+            emptyState.setCardElevation(dp(ELEVATION_SOFT));
+            emptyState.setRadius(dp(RADIUS_CARD));
             emptyState.setStrokeColor(borderColor());
             emptyState.setStrokeWidth(dp(1));
-            emptyState.setContentPadding(dp(24), dp(48), dp(24), dp(48));
+            emptyState.setContentPadding(dp(20), dp(24), dp(20), dp(32));
 
             LinearLayout content = new LinearLayout(this);
             content.setOrientation(LinearLayout.VERTICAL);
@@ -1476,19 +1796,16 @@ public class MainActivity extends AppCompatActivity {
                     ViewGroup.LayoutParams.WRAP_CONTENT
             ));
 
-            FrameLayout emptyIconSurface = new FrameLayout(this);
-            emptyIconSurface.setBackground(buttonBackground(accentContainerColor(), dp(36)));
-            content.addView(emptyIconSurface, new LinearLayout.LayoutParams(dp(72), dp(72)));
-
-            ImageView emptyIcon = new ImageView(this);
-            emptyIcon.setImageResource(R.drawable.ic_calendar_outline);
-            emptyIcon.setImageTintList(ColorStateList.valueOf(accentColor()));
-            emptyIcon.setScaleType(ImageView.ScaleType.CENTER);
-            emptyIcon.setContentDescription("\u6682\u65e0\u8bfe\u7a0b");
-            emptyIconSurface.addView(emptyIcon, new FrameLayout.LayoutParams(dp(34), dp(34), Gravity.CENTER));
+            // brief §12：空状态是二次元插画唯一可以"放开"的地方——没有课程要展示时，
+            // 角色的存在感可以明显高于其它位置，这是刻意的。
+            ImageView emptyArt = new ImageView(this);
+            emptyArt.setImageResource(R.drawable.empty_art);
+            emptyArt.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            emptyArt.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            content.addView(emptyArt, new LinearLayout.LayoutParams(dp(168), dp(252)));
 
             TextView emptyTitle = new TextView(this);
-            emptyTitle.setText("暂无课程");
+            emptyTitle.setText("今天没有课程");
             emptyTitle.setTextSize(18);
             emptyTitle.setTypeface(appTypeface(Typeface.BOLD));
             emptyTitle.setTextColor(primaryTextColor());
@@ -1511,8 +1828,25 @@ public class MainActivity extends AppCompatActivity {
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
             );
-            dateParams.setMargins(0, dp(6), 0, dp(24));
+            dateParams.setMargins(0, dp(6), 0, dp(14));
             content.addView(emptyDate, dateParams);
+
+            // brief §8：手写小字，每页最多 1~2 句，空状态这里用一句。
+            // 注意：Android 没有苹方，也没内嵌手写体（会明显增大 APK），
+            // 所以这里用系统字体 + 弱化的主色来近似"手写批注"的语气，不拿艺术字体冒充手写。
+            TextView emptyNote = new TextView(this);
+            emptyNote.setText("\u4eca\u5929\u4e5f\u53ef\u4ee5\u597d\u597d\u4f11\u606f\u4e00\u4e0b\u3002");
+            emptyNote.setTextSize(13);
+            emptyNote.setTypeface(appTypeface(Typeface.NORMAL));
+            emptyNote.setTextColor(withAlpha(accentColor(), isDarkMode ? 190 : 150));
+            emptyNote.setGravity(Gravity.CENTER);
+            emptyNote.setSingleLine(true);
+            LinearLayout.LayoutParams noteParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+            );
+            noteParams.setMargins(0, 0, 0, dp(22));
+            content.addView(emptyNote, noteParams);
 
             LinearLayout buttonRow = new LinearLayout(this);
             buttonRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -1563,33 +1897,253 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        for (Course course : dayCourses) {
-            courseList.addView(createCourseCard(course));
+        for (int i = 0; i < dayCourses.size(); i++) {
+            courseList.addView(createTimelineRow(
+                    dayCourses.get(i), i == 0, i == dayCourses.size() - 1));
         }
+    }
+
+    /**
+     * 课程卡片右下角装饰插画：按课程名关键词匹配主题小物件。
+     *
+     * 归类顺序有意固定：外语 → 程序/数据 → 计算机硬件 → 数理，避免"计算机组成原理"
+     * 被更宽泛的规则先截走。全部不命中时按课程名哈希稳定选取，保证同一门课每次渲染一致。
+     */
+    private int courseArtResId(Course course) {
+        String name = course.name == null
+                ? ""
+                : course.name.toLowerCase(java.util.Locale.ROOT);
+
+        if (containsAny(name, "英语", "english", "日语", "德语", "法语", "俄语", "外语",
+                "口语", "听力", "翻译", "写作")) {
+            return R.drawable.art_english;
+        }
+        if (containsAny(name, "数据结构", "算法", "编程", "程序", "代码", "软件", "数据库",
+                "操作系统", "编译", "语言", "人工智能", "机器学习")) {
+            return R.drawable.art_data;
+        }
+        if (containsAny(name, "计算机", "组成", "计组", "芯片", "硬件", "电路", "数字逻辑",
+                "微机", "嵌入式", "网络", "通信", "电子")) {
+            return R.drawable.art_computer;
+        }
+        if (containsAny(name, "数学", "高数", "代数", "几何", "微积分", "统计", "概率",
+                "线性", "离散", "物理", "化学", "力学", "分析", "数值")) {
+            return R.drawable.art_math;
+        }
+
+        int[] pool = {
+                R.drawable.art_math,
+                R.drawable.art_data,
+                R.drawable.art_computer,
+                R.drawable.art_english
+        };
+        int hash = 0;
+        for (int i = 0; i < name.length(); i++) {
+            hash = hash * 31 + name.charAt(i);
+        }
+        return pool[Math.abs(hash % pool.length)];
+    }
+
+    private boolean containsAny(String text, String... keys) {
+        for (String key : keys) {
+            if (text.contains(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 统一的线性小图标视图：固定正方形尺寸 + 染色 + 右侧间距。
+     * 装饰性图标不参与无障碍朗读（文本已经表达了同样信息）。
+     */
+    private android.widget.ImageView iconView(int resId, int color, int sizeDp, int marginRightPx) {
+        android.widget.ImageView icon = new android.widget.ImageView(this);
+        icon.setImageResource(resId);
+        icon.setImageTintList(ColorStateList.valueOf(color));
+        icon.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(sizeDp), dp(sizeDp));
+        params.setMargins(0, 0, marginRightPx, 0);
+        icon.setLayoutParams(params);
+        return icon;
+    }
+
+    /** 卡片详情里的一个「线性图标 + 文本」小组，用于地点 / 教师。 */
+    private LinearLayout detailGroup(int iconResId, String text, int color, boolean first) {
+        LinearLayout group = new LinearLayout(this);
+        group.setOrientation(LinearLayout.HORIZONTAL);
+        group.setGravity(Gravity.CENTER_VERTICAL);
+        // 两组均分行宽：房间名可能很长（例如"李小平教育大楼201"）。
+        // 若都用 WRAP_CONTENT，前一组会把宽度吃光，后一组被挤成一个孤零零的图标；
+        // 均分之后两组各自省略，教师至少还能看到名字开头。
+        LinearLayout.LayoutParams groupParams = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        if (!first) {
+            groupParams.setMargins(dp(7), 0, 0, 0);
+        }
+        group.setLayoutParams(groupParams);
+
+        // 图标与字号都收到 12：时间轴占了横向空间，详情行必须更紧才放得下地点 + 教师
+        group.addView(iconView(iconResId, color, 12, dp(4)));
+
+        TextView label = new TextView(this);
+        label.setText(text);
+        label.setTextSize(12);
+        label.setTypeface(appTypeface(Typeface.NORMAL));
+        label.setTextColor(color);
+        label.setIncludeFontPadding(false);
+        label.setSingleLine(true);
+        label.setEllipsize(TextUtils.TruncateAt.END);
+        // 文本占满组内剩余宽度，过长时按组宽省略
+        group.addView(label, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        return group;
+    }
+
+    /** 课程是否处于"正在上课 / 已进入提醒窗口"，卡片高亮与时间轴圆点共用这一个判断。 */
+    private boolean isCourseActive(Course course) {
+        TimetableRules.TemporalState state = courseTemporalState(course);
+        return state == TimetableRules.TemporalState.REMINDER_WINDOW
+                || state == TimetableRules.TemporalState.IN_PROGRESS;
+    }
+
+    /**
+     * 时间轴行（brief §六）：左侧 gutter 放时间、贯穿细竖线、圆点与「当前」标签，右侧是课程卡片。
+     *
+     * 关键细节：行间距做成**行内 padding** 而不是 layout_margin。
+     * 用 margin 的话竖线只能画到卡片底部，行与行之间会出现虚线断口；
+     * 放在 padding 里竖线就能连续贯穿整行，看起来才是一条完整的时间轴。
+     */
+    private View createTimelineRow(Course course, boolean isFirst, boolean isLast) {
+        boolean compact = isCompactWidth();
+        boolean current = isCourseActive(course);
+        boolean completed = courseTemporalState(course) == TimetableRules.TemporalState.COMPLETED;
+        int gapDp = current ? 18 : 12;
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setClipChildren(false);
+        row.setClipToPadding(false);
+        row.setPadding(0, 0, 0, dp(gapDp));
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowParams.setMargins(dp(contentSideMarginDp()), 0, 0, 0);
+        row.setLayoutParams(rowParams);
+
+        // ── 左 gutter：贯穿竖线（背景层）+ 时间 / 圆点 /「当前」标签（内容层）──
+        // 竖线必须做背景层而不是堆叠元素：若堆叠，它只能排在圆点之后，
+        // 下一行顶部的时间文字会把线断开，整体看起来是虚线而不是一条时间轴。
+        FrameLayout gutter = new FrameLayout(this);
+        // gutter 收窄到 40dp：354dp 上时间轴每多占 1dp，卡片内容区就少 1dp，
+        // 再宽就会把周次和地点挤成省略号。
+        int gutterWidthDp = compact ? 40 : 48;
+        row.addView(gutter, new LinearLayout.LayoutParams(
+                dp(gutterWidthDp), ViewGroup.LayoutParams.MATCH_PARENT));
+
+        int dotSizeDp = current ? 9 : 6;
+        if (!(isFirst && isLast)) {
+            View line = new View(this);
+            line.setBackgroundColor(borderColor());
+            // 末行的线在圆点处收住；其余行贯穿整行（含行内 padding），与下一行自然相接
+            FrameLayout.LayoutParams lineParams = new FrameLayout.LayoutParams(
+                    dp(1),
+                    isLast ? dp(TIMELINE_DOT_TOP_DP + dotSizeDp / 2)
+                           : ViewGroup.LayoutParams.MATCH_PARENT,
+                    Gravity.CENTER_HORIZONTAL);
+            if (isFirst) {
+                lineParams.topMargin = dp(TIMELINE_DOT_TOP_DP);
+            }
+            gutter.addView(line, lineParams);
+        }
+
+        LinearLayout gutterContent = new LinearLayout(this);
+        gutterContent.setOrientation(LinearLayout.VERTICAL);
+        gutterContent.setGravity(Gravity.CENTER_HORIZONTAL);
+        gutter.addView(gutterContent, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        TextView clock = new TextView(this);
+        clock.setText(clockText(courseStartMinutes(course)));
+        clock.setTextSize(11);
+        clock.setTypeface(current ? appTypefaceMedium() : appTypeface(Typeface.NORMAL));
+        clock.setTextColor(current ? accentColor() : secondaryTextColor());
+        clock.setIncludeFontPadding(false);
+        clock.setSingleLine(true);
+        gutterContent.addView(clock);
+
+        View dot = new View(this);
+        // 圆点跟随课程色（效果图里 08:00 是绿色、14:30 是蓝色），已完成的上降饱和
+        dot.setBackground(buttonBackground(
+                current ? accentColor()
+                        : (completed ? mixColor(cardColor(), course.color, 0.45f) : course.color),
+                dp(dotSizeDp / 2 + 1)));
+        LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(dotSizeDp), dp(dotSizeDp));
+        dotParams.setMargins(0, dp(5), 0, 0);
+        gutterContent.addView(dot, dotParams);
+
+        if (current) {
+            LinearLayout nowRow = new LinearLayout(this);
+            nowRow.setOrientation(LinearLayout.HORIZONTAL);
+            nowRow.setGravity(Gravity.CENTER_VERTICAL);
+
+            TextView nowTag = new TextView(this);
+            nowTag.setText("当前");
+            nowTag.setTextSize(10);
+            nowTag.setTypeface(appTypefaceMedium());
+            nowTag.setTextColor(Color.WHITE);
+            nowTag.setIncludeFontPadding(false);
+            nowTag.setGravity(Gravity.CENTER);
+            // 内边距收到 5dp：gutter 只有 40dp，还要塞下右侧那颗指向卡片的小三角
+            nowTag.setPadding(dp(5), dp(2), dp(5), dp(2));
+            nowTag.setBackground(buttonBackground(accentColor(), dp(100)));
+            nowRow.addView(nowTag);
+
+            // 效果图里「当前」胶囊右侧那颗指向课程卡片的小三角
+            android.widget.ImageView pointer = new android.widget.ImageView(this);
+            pointer.setImageResource(R.drawable.ic_pointer);
+            pointer.setImageTintList(ColorStateList.valueOf(accentColor()));
+            pointer.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            nowRow.addView(pointer, new LinearLayout.LayoutParams(dp(8), dp(8)));
+
+            LinearLayout.LayoutParams tagParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            tagParams.setMargins(0, dp(5), 0, 0);
+            gutterContent.addView(nowRow, tagParams);
+        }
+
+        // ── 右：课程卡片 ───────────────────────────────────────────────
+        row.addView(createCourseCard(course), new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        return row;
     }
 
     private View createCourseCard(Course course) {
         TimetableRules.TemporalState temporalState = courseTemporalState(course);
-        boolean active = temporalState == TimetableRules.TemporalState.REMINDER_WINDOW
-                || temporalState == TimetableRules.TemporalState.IN_PROGRESS;
+        boolean active = isCourseActive(course);
         boolean completed = temporalState == TimetableRules.TemporalState.COMPLETED;
         boolean compact = isCompactWidth();
-        int minHeightDp = active ? (compact ? 142 : 150) : (compact ? 92 : 100);
+        // 详情拆成两行后卡片变高，下限与进行中卡片的锁定高度同步放宽，避免裁切
+        int minHeightDp = active ? (compact ? 152 : 160) : (compact ? 108 : 116);
         BoundedMaterialCardView shell = new BoundedMaterialCardView(this);
         shell.setMinimumHeight(dp(minHeightDp));
         // 仅进行中卡片锁定最大高度（稳定倒计时/进度动画）；
         // 普通与灰化卡片高度随内容自适应，两行课程名 + 时间胶囊 + 信息行不再被裁切，
         // 系统大字号、竖屏窄屏同样安全。
-        shell.setMaxHeightPx(active ? dp(compact ? 158 : 168) : 0);
-        shell.setRadius(dp(active ? 28 : 24));
+        shell.setMaxHeightPx(active ? dp(compact ? 176 : 186) : 0);
+        // brief §10：主要卡片统一 16dp 圆角（原来是 24/28，偏"胖"）
+        shell.setRadius(dp(RADIUS_CARD));
         shell.setCardElevation(dp(active ? 5 : 1));
+        // brief §5 + 效果图：当前课是"浅蓝紫底 + 细蓝描边 + 深色字"。
+        // 填充与描边的浓度是照效果图量的：描边必须明显看得出来，否则整屏会糊成一片白。
         shell.setCardBackgroundColor(active
-                ? course.color
-                : mixColor(cardColor(), course.color, isDarkMode ? 0.08f : 0.04f));
-        shell.setStrokeWidth(dp(1));
+                ? mixColor(cardColor(), accentColor(), isDarkMode ? 0.34f : 0.18f)
+                : mixColor(cardColor(), course.color, isDarkMode ? 0.20f : 0.15f));
+        shell.setStrokeWidth(dp(active ? 2 : 1));
         shell.setStrokeColor(active
-                ? Color.argb(90, 255, 255, 255)
-                : mixColor(borderColor(), course.color, isDarkMode ? 0.20f : 0.12f));
+                ? mixColor(cardColor(), accentColor(), isDarkMode ? 0.88f : 0.62f)
+                : mixColor(cardColor(), course.color, isDarkMode ? 0.62f : 0.52f));
         shell.setClipChildren(true);
         shell.setClipToPadding(true);
         shell.setClipToOutline(true);
@@ -1601,6 +2155,23 @@ public class MainActivity extends AppCompatActivity {
                     ViewGroup.LayoutParams.MATCH_PARENT
             ));
         }
+
+        // 右下角极淡小插画（仅小物件，人物只出现在 Hero 区）。
+        // 加在 card 之前，因此渲染在文字下层；15% 透明度不影响可读性。
+        android.widget.ImageView courseArt = new android.widget.ImageView(this);
+        courseArt.setImageResource(courseArtResId(course));
+        // 效果图里插画占卡片右侧约三分之一、浓度明显，是卡片的主要装饰；
+        // 之前 15% 太淡，整张卡片看起来是空的。
+        courseArt.setAlpha(active ? 0.20f : COURSE_ART_ALPHA);
+        courseArt.setScaleType(android.widget.ImageView.ScaleType.FIT_END);
+        courseArt.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        FrameLayout.LayoutParams artParams = new FrameLayout.LayoutParams(
+                dp(compact ? 112 : 128),
+                dp(compact ? 76 : 88),
+                Gravity.BOTTOM | Gravity.END
+        );
+        artParams.setMargins(0, 0, dp(8), dp(6));
+        shell.addView(courseArt, artParams);
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.HORIZONTAL);
@@ -1624,7 +2195,8 @@ public class MainActivity extends AppCompatActivity {
         badge.setOrientation(LinearLayout.VERTICAL);
         badge.setGravity(Gravity.CENTER);
         badge.setPadding(dp(compact ? 10 : 12), dp(8), dp(compact ? 10 : 12), dp(8));
-        badge.setBackground(buttonBackground(active ? Color.argb(64, 255, 255, 255) : course.color, dp(active ? 20 : 16)));
+        // 当前课现在是浅底，徽章回到实心课程色（原来半透明白是为了配深色实心底）
+        badge.setBackground(buttonBackground(course.color, dp(active ? 20 : 16)));
 
         TextView periodNum = new TextView(this);
         String periodNumText;
@@ -1680,32 +2252,43 @@ public class MainActivity extends AppCompatActivity {
 
         TextView name = new TextView(this);
         name.setText(course.name);
-        name.setTextColor(active ? Color.WHITE : primaryTextColor());
+        name.setTextColor(primaryTextColor());
         name.setTextSize(active ? (compact ? 20 : 21) : (compact ? 17 : 18));
-        name.setTypeface(appTypeface(Typeface.BOLD));
+        name.setTypeface(appTypefaceSemiBold());
         name.setLetterSpacing(0f);
         name.setMaxLines(active ? 1 : 2);
         name.setEllipsize(TextUtils.TruncateAt.END);
         info.addView(name);
 
+        // 时间行：线性时钟 + 时间。照示意图不加药丸底色，也不在这里塞周次
+        // （周次已挪到下面的详情行，与地点、教师并排）。
+        LinearLayout timeRow = new LinearLayout(this);
+        timeRow.setOrientation(LinearLayout.HORIZONTAL);
+        timeRow.setGravity(Gravity.CENTER_VERTICAL);
+        // 效果图里时间文字下面垫着一层极淡的圆角底
+        timeRow.setPadding(dp(7), dp(3), dp(9), dp(3));
+        timeRow.setBackground(buttonBackground(
+                active ? Color.argb(56, 255, 255, 255) : tonalContainerColor(), dp(9)));
+
+        int timeFg = accentColor();
+        timeRow.addView(iconView(R.drawable.ic_clock_outline, timeFg, 12, dp(4)));
+
         TextView time = new TextView(this);
         time.setText(periodRangeTime(course));
-        time.setTextColor(active ? Color.WHITE : accentColor());
+        time.setTextColor(timeFg);
         time.setTextSize(12);
-        time.setTypeface(appTypeface(Typeface.BOLD));
+        time.setTypeface(appTypefaceMedium());
         time.setSingleLine(true);
         time.setEllipsize(TextUtils.TruncateAt.END);
         time.setIncludeFontPadding(false);
-        time.setGravity(Gravity.CENTER);
-        time.setPadding(dp(9), dp(4), dp(9), dp(4));
-        time.setBackground(buttonBackground(
-                active ? Color.argb(40, 255, 255, 255) : tonalContainerColor(), dp(9)));
+        timeRow.addView(time);
+
         LinearLayout.LayoutParams timeParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
         timeParams.setMargins(0, dp(6), 0, 0);
-        info.addView(time, timeParams);
+        info.addView(timeRow, timeParams);
 
         if (active) {
             View remaining = createRemainingCountdownView(course, compact);
@@ -1717,46 +2300,81 @@ public class MainActivity extends AppCompatActivity {
             info.addView(remaining, remainingParams);
         }
 
-        String detailText = courseDetailText(course);
-        if (!detailText.equals(periodRangeTime(course))) {
-            TextView detail = new TextView(this);
-            String secondary = course.secondaryText();
-            detail.setText(secondary);
-            detail.setTextColor(active ? Color.WHITE : secondaryTextColor());
-            detail.setTextSize(active ? (compact ? 14 : 15) : 14);
-            detail.setTypeface(appTypeface(Typeface.NORMAL));
-            detail.setAlpha(active ? 0.88f : 0.85f);
-            detail.setSingleLine(true);
-            detail.setEllipsize(TextUtils.TruncateAt.END);
-            LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
+        // 详情拆两行。保留时间轴后横向只剩约 140dp，而三组一行实测需要 168dp
+        // （周次 46 + 地点 56 + 教师 52 + 间距 14），硬排会把三组全部截断：
+        //   第一行：周次 + 地点      第二行：教师
+        int detailFg = secondaryTextColor();
+        String weeksText = course.invalidWeeks ? "上课周待修正"
+                : (course.weeks == null ? "" : course.weeks);
+        boolean hasWeeks = !weeksText.isEmpty();
+        boolean hasRoom = course.room != null && !course.room.isEmpty();
+        boolean hasTeacher = course.teacher != null && !course.teacher.isEmpty();
+
+        if (hasWeeks || hasRoom) {
+            LinearLayout detailLine1 = new LinearLayout(this);
+            detailLine1.setOrientation(LinearLayout.HORIZONTAL);
+            detailLine1.setGravity(Gravity.CENTER_VERTICAL);
+            boolean first = true;
+            if (hasWeeks) {
+                detailLine1.addView(detailGroup(
+                        course.invalidWeeks ? R.drawable.ic_warning : R.drawable.ic_calendar_outline,
+                        weeksText, detailFg, first));
+                first = false;
+            }
+            if (hasRoom) {
+                detailLine1.addView(detailGroup(R.drawable.ic_location, course.room, detailFg, first));
+            }
+            LinearLayout.LayoutParams line1Params = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
             );
-            detailParams.setMargins(0, dp(6), 0, 0);
-            info.addView(detail, detailParams);
+            line1Params.setMargins(0, dp(6), 0, 0);
+            info.addView(detailLine1, line1Params);
         }
 
-        // 右侧编辑按钮
+        if (hasTeacher) {
+            LinearLayout detailLine2 = new LinearLayout(this);
+            detailLine2.setOrientation(LinearLayout.HORIZONTAL);
+            detailLine2.setGravity(Gravity.CENTER_VERTICAL);
+            detailLine2.addView(detailGroup(R.drawable.ic_person, course.teacher, detailFg, true));
+            LinearLayout.LayoutParams line2Params = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+            );
+            line2Params.setMargins(0, dp(3), 0, 0);
+            info.addView(detailLine2, line2Params);
+        }
+
+        // 右侧编辑按钮：按示意图做成"右上角的小白圆"——更小、贴顶、对比更强。
         ImageButton edit = new ImageButton(this);
         edit.setImageResource(R.drawable.ic_more_horizontal);
-        edit.setImageTintList(ColorStateList.valueOf(active ? Color.argb(225, 255, 255, 255) : secondaryTextColor()));
+        edit.setImageTintList(ColorStateList.valueOf(primaryTextColor()));
         edit.setScaleType(android.widget.ImageView.ScaleType.CENTER);
-        edit.setBackground(interactiveSurfaceBackground(active
-                ? Color.argb(34, 255, 255, 255)
-                : withAlpha(secondaryTextColor(), isDarkMode ? 22 : 12), dp(18)));
-        edit.setPadding(dp(12), dp(12), dp(12), dp(12));
+        // 近白卡片上纯色圆块对比不足，看不出是个按钮；改用"白底 + 1dp 细描边 + 轻阴影"，
+        // 与示意图里那颗浮起的白圆一致。当前课现在也是浅底，所以两种状态共用同一种做法。
+        edit.setBackground(elevatedCardBackground(cardColor(), dp(18)));
+        edit.setElevation(dp(ELEVATION_SOFT));
+        edit.setPadding(dp(8), dp(8), dp(8), dp(8));
         edit.setContentDescription("\u7f16\u8f91\u8bfe\u7a0b");
         edit.setOnClickListener(view -> showCourseDialog(course));
-        card.addView(edit, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(dp(36), dp(36));
+        // 水平 LinearLayout 中 layout_gravity 控制纵向位置：贴顶对齐，和示意图一致
+        editParams.gravity = Gravity.TOP;
+        card.addView(edit, editParams);
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
-        params.setMargins(dp(contentSideMarginDp()), 0, dp(contentSideMarginDp()), dp(active ? 18 : 12));
+        // 左边距与行间距都交给 createTimelineRow（竖线要连续贯穿整行），这里只保留右边距
+        params.setMargins(0, 0, dp(contentSideMarginDp()), 0);
         shell.setLayoutParams(params);
+        // 「已完成」原来是在卡片上盖一层 36% 不透明的灰蓝罩（argb(92,156,163,174)）。
+        // 实测它会把卡片填充色、彩色描边和右下角插画全部糊掉，整列看过去是一片灰紫。
+        // 现在不再压灰罩：已完成的课程靠"时间轴圆点降饱和 + 插画减淡"来区分，
+        // 卡片本身保持和其它课程一样的通透度。
         if (completed) {
-            shell.setForeground(completedCourseFilterBackground(dp(active ? 28 : 18)));
+            courseArt.setAlpha(0.10f);
         }
         boolean approaching = temporalState == TimetableRules.TemporalState.REMINDER_WINDOW;
         boolean shakeEnabled = approaching && animationsEnabled();
@@ -1827,7 +2445,8 @@ public class MainActivity extends AppCompatActivity {
 
     private TextView createCountdownTextView(boolean compact) {
         TextView text = new TextView(this);
-        text.setTextColor(Color.argb(245, 255, 255, 255));
+        // 当前课已改成浅底，倒计时不能再用白字（原来是为实心主色底写的），改用主色保证对比度
+        text.setTextColor(accentColor());
         text.setTextSize(compact ? 14 : 15);
         text.setTypeface(appTypeface(Typeface.BOLD));
         text.setGravity(Gravity.CENTER_VERTICAL);
@@ -4219,14 +4838,6 @@ public class MainActivity extends AppCompatActivity {
         return leftName.compareTo(rightName);
     }
 
-    private String courseDetailText(Course course) {
-        String secondary = course.secondaryText();
-        if (secondary == null || secondary.isEmpty()) {
-            return periodRangeTime(course);
-        }
-        return periodRangeTime(course) + " · " + secondary;
-    }
-
     private String periodRangeTime(Course course) {
         if (course.customStartMinutes >= 0 && course.customEndMinutes >= 0) {
             return clockText(course.customStartMinutes) + "-" + clockText(course.customEndMinutes);
@@ -4455,6 +5066,22 @@ public class MainActivity extends AppCompatActivity {
         drawable.setColor(color);
         drawable.setCornerRadius(radius);
         return drawable;
+    }
+
+    /**
+     * 页面背景：三段竖直渐变（brief §1 #F5F8FD → #F3F7FC → #F7F9FD）。
+     * 三色差极小，目的只是去掉"一整片纯色"的平板感，让卡片像浮在很浅的冷色纸上。
+     */
+    private android.graphics.drawable.Drawable pageBackground() {
+        int[] stops = isDarkMode
+                ? new int[]{ Color.rgb(15, 18, 23), Color.rgb(13, 16, 22), Color.rgb(16, 19, 25) }
+                : new int[]{ PAGE_TOP_LIGHT, PAGE_MID_LIGHT, PAGE_BOTTOM_LIGHT };
+        return new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, stops);
+    }
+
+    /** 渐变顶部色。状态栏/导航栏跟随它，避免和页面背景割裂出两种颜色。 */
+    private int pageTopColor() {
+        return isDarkMode ? Color.rgb(15, 18, 23) : PAGE_TOP_LIGHT;
     }
 
     private int bgColor() {
@@ -4715,6 +5342,40 @@ public class MainActivity extends AppCompatActivity {
 
     private int contentSideMarginDp() {
         return isCompactWidth() ? 12 : CONTENT_SIDE_MARGIN_DP;
+    }
+
+    /**
+     * Hero 角色占用的宽度（dp）。brief 要求角色占屏宽 35%~45%。
+     * 「下一节」胶囊也用它做右侧留白，保证两者不会叠在一起。
+     */
+    private int heroReservedWidthDp(boolean compact) {
+        float density = getResources().getDisplayMetrics().density;
+        int screenWidthDp = Math.round(getResources().getDisplayMetrics().widthPixels / density);
+        return Math.round(screenWidthDp * (compact ? 0.42f : 0.38f));
+    }
+
+    /** 中黑字重：Android 没有 semibold 字族，这里用系统自带的 medium。 */
+    private Typeface appTypefaceMedium() {
+        return Typeface.create("sans-serif-medium", Typeface.NORMAL);
+    }
+
+    /**
+     * SemiBold。{@code Typeface.create(family, weight, italic)} 需要 API 28，
+     * 本项目 minSdk 23，所以更低版本降级到 medium，避免整段文字回退成 Regular。
+     */
+    private Typeface appTypefaceSemiBold() {
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            return Typeface.create(Typeface.create("sans-serif", Typeface.NORMAL), 600, false);
+        }
+        return Typeface.create("sans-serif-medium", Typeface.NORMAL);
+    }
+
+    /** 竖直双色渐变 + 圆角，用于「下一节」胶囊。 */
+    private GradientDrawable verticalGradientBackground(int top, int bottom, int radius) {
+        GradientDrawable drawable = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM, new int[]{top, bottom});
+        drawable.setCornerRadius(radius);
+        return drawable;
     }
 
     private Typeface appTypeface(int style) {
@@ -5030,7 +5691,8 @@ public class MainActivity extends AppCompatActivity {
         CourseProgressView(Course course) {
             super(MainActivity.this);
             this.course = course;
-            paint.setColor(Color.argb(72, 255, 255, 255));
+            // 当前课是浅底，白色叠加层会看不见；改成主色淡染，进度越深颜色越明显
+            paint.setColor(withAlpha(accentColor(), isDarkMode ? 44 : 24));
         }
 
         @Override
@@ -5084,30 +5746,6 @@ public class MainActivity extends AppCompatActivity {
                 return "第" + period + "-" + endPeriod + "节";
             }
             return "第" + period + "节";
-        }
-
-        String periodBadgeText() {
-            if (endPeriod > period) {
-                return "第\n" + period + "-" + endPeriod + "\n节";
-            }
-            return "第\n" + period + "\n节";
-        }
-
-        String secondaryText() {
-            List<String> parts = new ArrayList<>();
-            if (invalidWeeks) {
-                parts.add("⚠ 上课周格式需修正");
-            }
-            if (weeks != null && !weeks.isEmpty()) {
-                parts.add(weeks);
-            }
-            if (room != null && !room.isEmpty()) {
-                parts.add(room);
-            }
-            if (teacher != null && !teacher.isEmpty()) {
-                parts.add(teacher);
-            }
-            return parts.isEmpty() ? "暂无上课周、地点和老师信息" : join(parts, " · ");
         }
 
         Course copy() {

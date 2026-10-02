@@ -1,0 +1,11 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 时间轴「当前」胶囊指向卡片的实心小三角（效果图里那颗右指箭头）。
+         纯几何三角，不用曲线，缩放不会变形。 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M7,4 L7,20 L19,12 Z" />
+</vector>
