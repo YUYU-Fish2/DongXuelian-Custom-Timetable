@@ -114,18 +114,26 @@ public class MainActivity extends AppCompatActivity {
     private static final int HERO_CHARACTER_MAX_HEIGHT_DP = 174;
     // hero_character.png 的固有宽高比（1100 x 1006）。
     private static final float HERO_CHARACTER_ASPECT = 1006f / 1100f;
-    // 课程卡片右下角小插画的透明度。照效果图量出来约 25%~35%，取偏保守的下沿，
-    // 因为真机卡片比效果图窄，插画占比更大会压到文字。
-    private static final float COURSE_ART_ALPHA = 0.80f;
+    // 课程卡片右下角小插画的透明度。
+    // 按反馈"要像 Hero 一样凸显"，已提到接近满不透明；素材端也把饱和/对比拉了一档。
+    // 插画绘制在文字下层，且位于右下角，长文本省略时也不会盖住可读内容。
+    private static final float COURSE_ART_ALPHA = 0.95f;
 
     // ─────────────────────────────────────────────────────────────────────
     // 设计 token（brief §1 / §10）。统一收在这里，不要再往 buildLayout 里散写常量。
     // ─────────────────────────────────────────────────────────────────────
 
-    /** 背景三段竖直渐变（brief §1 给了很浅的底色，但实测整屏偏灰发淡，按效果图加了蓝度）。 */
+    /**
+     * 背景三段竖直渐变。
+     *
+     * 按效果图实测取值：参考图整页是**连续的淡蓝**，越往下越蓝
+     * （y=40 #F2F7FE -> y=1000 #F6F9FE -> y=1400 #E3EBFA -> y=1480 #D3E0F7）。
+     * 早先底部取了 #F8FAFF（几乎是白的），结果 Hero 的蓝往下过渡到中间
+     * 突然变成一片白，断层很突兀。现在中段和底部都跟着蓝下去，整页才连续。
+     */
     private static final int PAGE_TOP_LIGHT = 0xFFEDF4FE;
-    private static final int PAGE_MID_LIGHT = 0xFFF4F8FE;
-    private static final int PAGE_BOTTOM_LIGHT = 0xFFF8FAFF;
+    private static final int PAGE_MID_LIGHT = 0xFFF1F6FE;
+    private static final int PAGE_BOTTOM_LIGHT = 0xFFE3ECFB;
 
     /** 圆角（brief §10）：主要卡片 16dp、按钮 16~20dp、胶囊全圆、小标签 10~12dp。 */
     private static final int RADIUS_CARD = 16;
@@ -832,17 +840,17 @@ public class MainActivity extends AppCompatActivity {
     private void addPageDecorations(FrameLayout safeFrame) {
         // 浓度说明：brief 给的 5%~20% 是相对"深色装饰压在浅底上"而言的。
         // 这批素材本身是淡蓝白水彩，压在同样是淡蓝白的页面上，
-        // 10% 出头实测基本等于隐形（只剩一点影子）。所以按实测提到 26%~34%，
-        // 既能看清是什么，又依然远低于课程卡片的视觉权重。
+        // 10% 出头实测基本等于隐形（只剩一点影子）。
+        // 按反馈"要像 Hero 一样凸显"，已提到 62%~70%；素材端也把饱和/对比拉了一档。
         // 注：deco_petal 现在是「一朵完整的小雪莲花」，文件名保留是为了不动已有引用。
         addDecoration(safeFrame, R.drawable.deco_star,
-                Gravity.TOP | Gravity.START, 26, 104, 10, 0.30f);
+                Gravity.TOP | Gravity.START, 28, 104, 8, 0.64f);
         addDecoration(safeFrame, R.drawable.deco_petal,
-                Gravity.BOTTOM | Gravity.START, 44, 104, 14, 0.34f);
+                Gravity.BOTTOM | Gravity.START, 50, 104, 10, 0.70f);
         addDecoration(safeFrame, R.drawable.deco_leaf,
-                Gravity.BOTTOM | Gravity.START, 52, 26, 6, 0.30f);
+                Gravity.BOTTOM | Gravity.START, 58, 22, 4, 0.64f);
         addDecoration(safeFrame, R.drawable.deco_cloud,
-                Gravity.BOTTOM | Gravity.END, 78, 40, 6, 0.26f);
+                Gravity.BOTTOM | Gravity.END, 86, 34, 4, 0.62f);
     }
 
     /** 放一个纯装饰小图。四个方向都设 margin，实际由 gravity 决定用哪几个。 */
@@ -2217,11 +2225,11 @@ public class MainActivity extends AppCompatActivity {
         courseArt.setScaleType(android.widget.ImageView.ScaleType.FIT_END);
         courseArt.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         FrameLayout.LayoutParams artParams = new FrameLayout.LayoutParams(
-                dp(compact ? 112 : 128),
-                dp(compact ? 76 : 88),
+                dp(compact ? 124 : 140),
+                dp(compact ? 100 : 112),
                 Gravity.BOTTOM | Gravity.END
         );
-        artParams.setMargins(0, 0, dp(8), dp(6));
+        artParams.setMargins(0, 0, dp(6), dp(3));
         shell.addView(courseArt, artParams);
 
         LinearLayout card = new LinearLayout(this);
