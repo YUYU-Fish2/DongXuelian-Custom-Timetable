@@ -787,6 +787,25 @@ public class MainActivity extends AppCompatActivity {
         sceneParams.rightMargin = -bleedSidePx;
         safeFrame.addView(scene, sceneParams);
 
+        // 深色模式下 Hero 仍是一张白天的亮图，直接铺上去会整块发亮，
+        // 白色标题压在亮天空上根本读不清。叠一层自上而下的暗色蒙版把它压下来：
+        // 顶部最重（标题就在那里），向下逐渐放开，保留画面但不抢文字。
+        if (isDarkMode) {
+            View scrim = new View(this);
+            scrim.setBackground(new GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{0xF2101620, 0xB3101620, 0x66101620, 0x00101620}));
+            scrim.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            FrameLayout.LayoutParams scrimParams = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    dp(Math.round(heroHeightDp * 1.36f)) + bleedTopPx,
+                    Gravity.TOP);
+            scrimParams.topMargin = -bleedTopPx;
+            scrimParams.leftMargin = -bleedSidePx;
+            scrimParams.rightMargin = -bleedSidePx;
+            safeFrame.addView(scrim, scrimParams);
+        }
+
         // 角色背后的淡圆形渐变光晕：纯代码绘制，不烘进角色图，便于跟随主题色
         int glowSizeDp = Math.round(heroReservedWidthDp(compact) * 1.7f);
         View glow = new View(this);
@@ -827,6 +846,13 @@ public class MainActivity extends AppCompatActivity {
         android.widget.ImageView view = new android.widget.ImageView(this);
         view.setImageResource(resId);
         view.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        if (isDarkMode) {
+            // 装饰素材本身是极浅的蓝色线稿，压在近黑底上只剩一团没有颜色的灰斑，
+            // 看起来像脏点。深色模式下改用主色染色、并适度提高不透明度，
+            // 让它读起来是"有意的装饰"。
+            view.setImageTintList(ColorStateList.valueOf(accentColor()));
+            alpha = Math.min(0.55f, alpha * 2.2f);
+        }
         view.setAlpha(alpha);
         view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(sizeDp), dp(sizeDp), gravity);
@@ -5029,7 +5055,10 @@ public class MainActivity extends AppCompatActivity {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(color);
         drawable.setCornerRadius(dp(14));
-        drawable.setStroke(dp(selected ? 3 : 1), selected ? Color.WHITE : Color.argb(70, 255, 255, 255));
+        // 原来是"选中＝纯白 3dp / 未选中＝27% 白 1dp"，那是给深色底写的：
+        // 弹窗面板本身是白色，白圈在白底上等于没有，选中哪一格完全看不出来。
+        // 现在选中用主色圈、未选中用描边色，浅色主题下都能看清。
+        drawable.setStroke(dp(selected ? 3 : 1), selected ? accentColor() : borderColor());
         return drawable;
     }
 
