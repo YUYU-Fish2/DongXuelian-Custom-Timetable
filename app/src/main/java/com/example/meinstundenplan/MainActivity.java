@@ -768,21 +768,23 @@ public class MainActivity extends AppCompatActivity {
         scene.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
         scene.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
 
-        // safeFrame 带「状态栏高度 + 16dp」的顶部内边距，Hero 图若直接贴 TOP，
-        // 状态栏下方会留出一条纯色空白，看起来像人物图上方缺了一块。
-        // 这里用负 topMargin 把它顶出内边距、延伸到状态栏之下，高度同步补齐，
-        // 视觉上才是一整块连续的画面。
+        // safeFrame 四边都有内边距（上＝状态栏+16dp，左右＝12/20dp），Hero 图若直接用
+        // MATCH_PARENT 填的只是"内容盒"，四边都会露出一条底色，看起来像画面缺了一圈。
+        // 用负 margin 把它顶满整个窗口，四个方向都补齐，视觉上才是一整块连续的画。
         int statusBarPx = 0;
         int statusBarRes = getResources().getIdentifier("status_bar_height", "dimen", "android");
         if (statusBarRes > 0) {
             statusBarPx = getResources().getDimensionPixelSize(statusBarRes);
         }
-        int bleedPx = statusBarPx + dp(16);
+        int bleedTopPx = statusBarPx + dp(16);
+        int bleedSidePx = dp(compact ? 12 : 20);
         FrameLayout.LayoutParams sceneParams = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(Math.round(heroHeightDp * 1.36f)) + bleedPx,
+                dp(Math.round(heroHeightDp * 1.36f)) + bleedTopPx,
                 Gravity.TOP);
-        sceneParams.topMargin = -bleedPx;
+        sceneParams.topMargin = -bleedTopPx;
+        sceneParams.leftMargin = -bleedSidePx;
+        sceneParams.rightMargin = -bleedSidePx;
         safeFrame.addView(scene, sceneParams);
 
         // 角色背后的淡圆形渐变光晕：纯代码绘制，不烘进角色图，便于跟随主题色
@@ -1698,7 +1700,7 @@ public class MainActivity extends AppCompatActivity {
         params.height = selectedTab.getHeight();
         daySelectionSlider.setLayoutParams(params);
         // brief §6：选中态是"浅蓝紫药丸 + 蓝字 + 下方圆点"，不要描边
-        daySelectionSlider.setBackground(roundedSurface(tonalContainerColor(), dp(20), Color.TRANSPARENT));
+        daySelectionSlider.setBackground(roundedSurface(selectedDayColor(), dp(20), Color.TRANSPARENT));
 
         float target = selectedTab.getLeft();
         daySelectionSlider.animate().cancel();
@@ -5178,6 +5180,16 @@ public class MainActivity extends AppCompatActivity {
 
     private int tonalContainerColor() {
         return mixColor(accentColor(), cardColor(), 0.90f);
+    }
+
+    /**
+     * 选中日期药丸色。
+     *
+     * 原来直接复用 tonalContainerColor()（10% 主色），实测得到 #EDEFFB，
+     * 而效果图里选中日是清楚的浅蓝 #DDE8FE，浓度差了一倍，选中态看不出来。
+     */
+    private int selectedDayColor() {
+        return mixColor(accentColor(), cardColor(), isDarkMode ? 0.72f : 0.80f);
     }
 
     private void loadCourses() {
