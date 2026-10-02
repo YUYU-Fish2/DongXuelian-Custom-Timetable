@@ -33,6 +33,7 @@ final class R {
         static final int deco_star = 29;
         static final int deco_cloud = 30;
         static final int ic_pointer = 31;
+        static final int hero_scene = 32;
     }
 
     static final class string {

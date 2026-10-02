@@ -116,7 +116,7 @@ public class MainActivity extends AppCompatActivity {
     private static final float HERO_CHARACTER_ASPECT = 1006f / 1100f;
     // 课程卡片右下角小插画的透明度。照效果图量出来约 25%~35%，取偏保守的下沿，
     // 因为真机卡片比效果图窄，插画占比更大会压到文字。
-    private static final float COURSE_ART_ALPHA = 0.34f;
+    private static final float COURSE_ART_ALPHA = 0.62f;
 
     // ─────────────────────────────────────────────────────────────────────
     // 设计 token（brief §1 / §10）。统一收在这里，不要再往 buildLayout 里散写常量。
@@ -756,36 +756,20 @@ public class MainActivity extends AppCompatActivity {
      * 改为保留白底、整体压到 22%：白色叠在 #F5F8FD 页面上只差约 2/255（看不出边界），
      * 而云和花瓣会作为很淡的纹理透出来。素材四周已做羽化，不会出现矩形硬边。
      */
-    private void addHeroAmbient(FrameLayout safeFrame, boolean compact) {
+    private void addHeroScene(FrameLayout safeFrame, boolean compact) {
         float density = getResources().getDisplayMetrics().density;
-        int screenWidthDp = Math.round(getResources().getDisplayMetrics().widthPixels / density);
         int screenHeightDp = Math.round(getResources().getDisplayMetrics().heightPixels / density);
         int heroHeightDp = Math.min(Math.round(screenHeightDp * 0.22f), HERO_CHARACTER_MAX_HEIGHT_DP);
 
-        android.widget.ImageView ambient = new android.widget.ImageView(this);
-        ambient.setImageResource(R.drawable.hero_ambient);
-        ambient.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
-        ambient.setAlpha(0.55f);
-        ambient.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        safeFrame.addView(ambient, new FrameLayout.LayoutParams(
-                dp(Math.round(screenWidthDp * 0.94f)),
-                dp(Math.round(heroHeightDp * 1.3f)),
-                Gravity.TOP | Gravity.END));
-
-        // Hero 顶部天空底色。效果图整个 Hero 区是明显偏蓝的（实测顶部 #F2F7FE），
-        // 纯白背景会让整屏显得发灰、发淡。这里用**代码渐变**（不是手绘插画）从淡蓝过渡到透明，
-        // 让顶部亮起来，同时把下面的课程卡片衬得更清楚。
-        View sky = new View(this);
-        sky.setBackground(new GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{
-                        isDarkMode ? 0xFF151B26 : 0xFFDCEAFD,
-                        isDarkMode ? 0x00151B26 : 0x00DCEAFD
-                }));
-        sky.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        safeFrame.addView(sky, new FrameLayout.LayoutParams(
+        // 整张 Hero 图：窗 + 天空 + 云 + 白花 + 人物都在同一张画里，光照统一，不需要再分层。
+        // 素材落库前已做四边羽化 + 底边大幅渐隐，所以直接铺满顶部，无需再叠天空渐变。
+        android.widget.ImageView scene = new android.widget.ImageView(this);
+        scene.setImageResource(R.drawable.hero_scene);
+        scene.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+        scene.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        safeFrame.addView(scene, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(Math.round(heroHeightDp * 1.95f)),
+                dp(Math.round(heroHeightDp * 1.36f)),
                 Gravity.TOP));
 
         // 角色背后的淡圆形渐变光晕：纯代码绘制，不烘进角色图，便于跟随主题色
@@ -889,10 +873,10 @@ public class MainActivity extends AppCompatActivity {
             return insets;
         });
 
-        // Hero 氛围层 + 角色插画：都加在滚动容器之前，因此渲染在内容下层。
+        // Hero 整图：窗户 + 天空 + 云 + 白花 + 人物画在同一张画里（比分两层叠放更统一）。
+        // 加在滚动容器之前，因此渲染在内容下层。
         if (SHOW_HERO_CHARACTER) {
-            addHeroAmbient(safeFrame, compact);
-            addHeroCharacter(safeFrame, compact);
+            addHeroScene(safeFrame, compact);
         }
         addPageDecorations(safeFrame);
 
