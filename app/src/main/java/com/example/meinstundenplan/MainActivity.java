@@ -116,7 +116,7 @@ public class MainActivity extends AppCompatActivity {
     private static final float HERO_CHARACTER_ASPECT = 1006f / 1100f;
     // 课程卡片右下角小插画的透明度。照效果图量出来约 25%~35%，取偏保守的下沿，
     // 因为真机卡片比效果图窄，插画占比更大会压到文字。
-    private static final float COURSE_ART_ALPHA = 0.62f;
+    private static final float COURSE_ART_ALPHA = 0.80f;
 
     // ─────────────────────────────────────────────────────────────────────
     // 设计 token（brief §1 / §10）。统一收在这里，不要再往 buildLayout 里散写常量。
@@ -767,10 +767,23 @@ public class MainActivity extends AppCompatActivity {
         scene.setImageResource(R.drawable.hero_scene);
         scene.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
         scene.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        safeFrame.addView(scene, new FrameLayout.LayoutParams(
+
+        // safeFrame 带「状态栏高度 + 16dp」的顶部内边距，Hero 图若直接贴 TOP，
+        // 状态栏下方会留出一条纯色空白，看起来像人物图上方缺了一块。
+        // 这里用负 topMargin 把它顶出内边距、延伸到状态栏之下，高度同步补齐，
+        // 视觉上才是一整块连续的画面。
+        int statusBarPx = 0;
+        int statusBarRes = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        if (statusBarRes > 0) {
+            statusBarPx = getResources().getDimensionPixelSize(statusBarRes);
+        }
+        int bleedPx = statusBarPx + dp(16);
+        FrameLayout.LayoutParams sceneParams = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(Math.round(heroHeightDp * 1.36f)),
-                Gravity.TOP));
+                dp(Math.round(heroHeightDp * 1.36f)) + bleedPx,
+                Gravity.TOP);
+        sceneParams.topMargin = -bleedPx;
+        safeFrame.addView(scene, sceneParams);
 
         // 角色背后的淡圆形渐变光晕：纯代码绘制，不烘进角色图，便于跟随主题色
         int glowSizeDp = Math.round(heroReservedWidthDp(compact) * 1.7f);
@@ -865,7 +878,9 @@ public class MainActivity extends AppCompatActivity {
         FrameLayout safeFrame = new FrameLayout(this);
         safeFrame.setBackground(pageBackground());
         safeFrame.setClipChildren(true);
-        safeFrame.setClipToPadding(true);
+        // 必须为 false：Hero 图要用负 topMargin 顶进状态栏区域，
+        // 保持 true 的话会被裁到 padding 盒里，状态栏下方就会留出一条纯色空白。
+        safeFrame.setClipToPadding(false);
         safeFrame.setOnApplyWindowInsetsListener((view, insets) -> {
             WindowInsets applied = insets;
             int horizontalPadding = dp(compact ? 12 : 20);
@@ -2141,8 +2156,8 @@ public class MainActivity extends AppCompatActivity {
         // brief §5 + 效果图：当前课是"浅蓝紫底 + 细蓝描边 + 深色字"。
         // 填充与描边的浓度是照效果图量的：描边必须明显看得出来，否则整屏会糊成一片白。
         shell.setCardBackgroundColor(active
-                ? mixColor(cardColor(), accentColor(), isDarkMode ? 0.34f : 0.18f)
-                : mixColor(cardColor(), course.color, isDarkMode ? 0.20f : 0.15f));
+                ? mixColor(cardColor(), accentColor(), isDarkMode ? 0.38f : 0.24f)
+                : mixColor(cardColor(), course.color, isDarkMode ? 0.26f : 0.20f));
         shell.setStrokeWidth(dp(active ? 2 : 1));
         shell.setStrokeColor(active
                 ? mixColor(cardColor(), accentColor(), isDarkMode ? 0.88f : 0.62f)
