@@ -830,14 +830,19 @@ public class MainActivity extends AppCompatActivity {
      * 都加在滚动容器之前，所以课程卡片始终压在它们上面，装饰不会影响任何课程信息。
      */
     private void addPageDecorations(FrameLayout safeFrame) {
+        // 浓度说明：brief 给的 5%~20% 是相对"深色装饰压在浅底上"而言的。
+        // 这批素材本身是淡蓝白水彩，压在同样是淡蓝白的页面上，
+        // 10% 出头实测基本等于隐形（只剩一点影子）。所以按实测提到 26%~34%，
+        // 既能看清是什么，又依然远低于课程卡片的视觉权重。
+        // 注：deco_petal 现在是「一朵完整的小雪莲花」，文件名保留是为了不动已有引用。
         addDecoration(safeFrame, R.drawable.deco_star,
-                Gravity.TOP | Gravity.START, 24, 104, 10, 0.13f);
+                Gravity.TOP | Gravity.START, 26, 104, 10, 0.30f);
         addDecoration(safeFrame, R.drawable.deco_petal,
-                Gravity.BOTTOM | Gravity.START, 34, 104, 18, 0.10f);
+                Gravity.BOTTOM | Gravity.START, 44, 104, 14, 0.34f);
         addDecoration(safeFrame, R.drawable.deco_leaf,
-                Gravity.BOTTOM | Gravity.START, 46, 26, 8, 0.12f);
+                Gravity.BOTTOM | Gravity.START, 52, 26, 6, 0.30f);
         addDecoration(safeFrame, R.drawable.deco_cloud,
-                Gravity.BOTTOM | Gravity.END, 66, 40, 6, 0.10f);
+                Gravity.BOTTOM | Gravity.END, 78, 40, 6, 0.26f);
     }
 
     /** 放一个纯装饰小图。四个方向都设 margin，实际由 gravity 决定用哪几个。 */
