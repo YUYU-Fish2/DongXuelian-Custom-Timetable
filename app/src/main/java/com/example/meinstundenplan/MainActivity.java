@@ -157,10 +157,17 @@ public class MainActivity extends AppCompatActivity {
     private static final int ACTION_BUTTON_SIZE_DP = 42;
 
     /**
-     * 时间轴 gutter 中圆点的纵向基准（时间文字高度 + 间距）。
-     * 首行竖线要从这里起、末行竖线要在这里收，否则线会多出或缺少一截。
+     * 时间轴竖线距 gutter 右边缘的距离。
+     * 时间和圆点排成一行右对齐、圆点压在竖线上，都靠这个值对齐。
      */
-    private static final int TIMELINE_DOT_TOP_DP = 20;
+    private static final int TIMELINE_LINE_INSET_DP = 11;
+
+    /**
+     * 时间轴 gutter 中圆点相对行顶的纵向位置。
+     * 首行竖线要从这里起、末行竖线要在这里收，否则线会多出或缺少一截。
+     * （时间和圆点同一行，所以只差半个行高。）
+     */
+    private static final int TIMELINE_DOT_TOP_DP = 8;
     private static final int REQUEST_POST_NOTIFICATIONS = 61;
     private static final int LONG_CLASS_REMINDER_MINUTES = 30;
     private static final int SHORT_CLASS_REMINDER_MINUTES = 10;
@@ -1984,12 +1991,13 @@ public class MainActivity extends AppCompatActivity {
         }
         group.setLayoutParams(groupParams);
 
-        // 图标与字号都收到 12：时间轴占了横向空间，详情行必须更紧才放得下地点 + 教师
-        group.addView(iconView(iconResId, color, 12, dp(4)));
+        // 图标与字号都收到 11：时间轴改成"时间+圆点"同行后 gutter 加宽到 50dp，
+        // 详情行必须再紧一档，才能把"锡科503"这类地点完整放下。
+        group.addView(iconView(iconResId, color, 11, dp(4)));
 
         TextView label = new TextView(this);
         label.setText(text);
-        label.setTextSize(12);
+        label.setTextSize(11);
         label.setTypeface(appTypeface(Typeface.NORMAL));
         label.setTextColor(color);
         label.setIncludeFontPadding(false);
@@ -2035,9 +2043,9 @@ public class MainActivity extends AppCompatActivity {
         // 竖线必须做背景层而不是堆叠元素：若堆叠，它只能排在圆点之后，
         // 下一行顶部的时间文字会把线断开，整体看起来是虚线而不是一条时间轴。
         FrameLayout gutter = new FrameLayout(this);
-        // gutter 收窄到 40dp：354dp 上时间轴每多占 1dp，卡片内容区就少 1dp，
-        // 再宽就会把周次和地点挤成省略号。
-        int gutterWidthDp = compact ? 40 : 48;
+        // gutter 50dp：时间和圆点要排在同一行（效果图是 "08:00 ●"），比原来纵向堆叠更占宽。
+        // 再多就会把卡片里的周次和地点挤成省略号。
+        int gutterWidthDp = compact ? 50 : 58;
         row.addView(gutter, new LinearLayout.LayoutParams(
                 dp(gutterWidthDp), ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -2045,12 +2053,14 @@ public class MainActivity extends AppCompatActivity {
         if (!(isFirst && isLast)) {
             View line = new View(this);
             line.setBackgroundColor(borderColor());
-            // 末行的线在圆点处收住；其余行贯穿整行（含行内 padding），与下一行自然相接
+            // 末行的线在圆点处收住；其余行贯穿整行（含行内 padding），与下一行自然相接。
+            // 靠右对齐 + rightMargin，让竖线正好穿过圆点中心。
             FrameLayout.LayoutParams lineParams = new FrameLayout.LayoutParams(
                     dp(1),
                     isLast ? dp(TIMELINE_DOT_TOP_DP + dotSizeDp / 2)
                            : ViewGroup.LayoutParams.MATCH_PARENT,
-                    Gravity.CENTER_HORIZONTAL);
+                    Gravity.END);
+            lineParams.rightMargin = dp(TIMELINE_LINE_INSET_DP);
             if (isFirst) {
                 lineParams.topMargin = dp(TIMELINE_DOT_TOP_DP);
             }
@@ -2059,18 +2069,25 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout gutterContent = new LinearLayout(this);
         gutterContent.setOrientation(LinearLayout.VERTICAL);
-        gutterContent.setGravity(Gravity.CENTER_HORIZONTAL);
+        gutterContent.setGravity(Gravity.END);
         gutter.addView(gutterContent, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // 时间与圆点同一行，整组右对齐 —— 效果图是 "08:00 ●"，竖线穿过圆点
+        LinearLayout clockRow = new LinearLayout(this);
+        clockRow.setOrientation(LinearLayout.HORIZONTAL);
+        clockRow.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        clockRow.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView clock = new TextView(this);
         clock.setText(clockText(courseStartMinutes(course)));
-        clock.setTextSize(11);
+        clock.setTextSize(10);
         clock.setTypeface(current ? appTypefaceMedium() : appTypeface(Typeface.NORMAL));
         clock.setTextColor(current ? accentColor() : secondaryTextColor());
         clock.setIncludeFontPadding(false);
         clock.setSingleLine(true);
-        gutterContent.addView(clock);
+        clockRow.addView(clock);
 
         View dot = new View(this);
         // 圆点跟随课程色（效果图里 08:00 是绿色、14:30 是蓝色），已完成的上降饱和
@@ -2079,8 +2096,10 @@ public class MainActivity extends AppCompatActivity {
                         : (completed ? mixColor(cardColor(), course.color, 0.45f) : course.color),
                 dp(dotSizeDp / 2 + 1)));
         LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(dotSizeDp), dp(dotSizeDp));
-        dotParams.setMargins(0, dp(5), 0, 0);
-        gutterContent.addView(dot, dotParams);
+        // 让圆点圆心正好落在竖线上
+        dotParams.setMargins(dp(4), 0, dp(TIMELINE_LINE_INSET_DP - dotSizeDp / 2), 0);
+        clockRow.addView(dot, dotParams);
+        gutterContent.addView(clockRow);
 
         if (current) {
             LinearLayout nowRow = new LinearLayout(this);
