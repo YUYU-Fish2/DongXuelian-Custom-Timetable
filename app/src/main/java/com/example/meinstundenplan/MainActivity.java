@@ -112,8 +112,6 @@ public class MainActivity extends AppCompatActivity {
     private static final boolean SHOW_HERO_CHARACTER = true;
     // Hero 高度硬上限：不超过屏高的 22%，避免压缩课表可视空间。
     private static final int HERO_CHARACTER_MAX_HEIGHT_DP = 174;
-    // hero_character.png 的固有宽高比（1100 x 1006）。
-    private static final float HERO_CHARACTER_ASPECT = 1006f / 1100f;
     // 课程卡片右下角小插画的透明度。
     // 按反馈"要像 Hero 一样凸显"，已提到接近满不透明；素材端也把饱和/对比拉了一档。
     // 插画绘制在文字下层，且位于右下角，长文本省略时也不会盖住可读内容。
@@ -876,42 +874,6 @@ public class MainActivity extends AppCompatActivity {
         params.leftMargin = dp(horizontalMarginDp);
         params.rightMargin = dp(horizontalMarginDp);
         parent.addView(view, params);
-    }
-
-    /**
-     * Hero 区角色插画（陪伴型视觉元素，不遮挡任何课程信息）。
-     *
-     * 素材在落库前已经做过边缘羽化——白底向页面底色渐隐，所以这里不做抠图、不加背景。
-     * 只负责：按 brief 把宽度控制在屏宽 35%~45%，并让高度受屏高 22% 与硬上限约束，
-     * 保证加入人物后不会压缩课表可视空间。
-     */
-    private void addHeroCharacter(FrameLayout safeFrame, boolean compact) {
-        float density = getResources().getDisplayMetrics().density;
-        int screenHeightDp = Math.round(getResources().getDisplayMetrics().heightPixels / density);
-
-        int widthDp = heroReservedWidthDp(compact);
-        int heightDp = Math.round(widthDp * HERO_CHARACTER_ASPECT);
-
-        // hero 高度上限：屏高 22% 与 HERO_CHARACTER_MAX_HEIGHT_DP 取小
-        int maxHeightDp = Math.min(Math.round(screenHeightDp * 0.22f), HERO_CHARACTER_MAX_HEIGHT_DP);
-        if (heightDp > maxHeightDp) {
-            heightDp = maxHeightDp;
-            widthDp = Math.round(heightDp / HERO_CHARACTER_ASPECT);
-        }
-
-        android.widget.ImageView heroCharacter = new android.widget.ImageView(this);
-        heroCharacter.setImageResource(R.drawable.hero_character);
-        heroCharacter.setScaleType(android.widget.ImageView.ScaleType.FIT_START);
-        heroCharacter.setAdjustViewBounds(false);
-        // 纯装饰，不参与无障碍朗读
-        heroCharacter.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                dp(widthDp),
-                dp(heightDp),
-                Gravity.TOP | Gravity.END
-        );
-        safeFrame.addView(heroCharacter, params);
     }
 
     private void buildLayout() {
@@ -1879,23 +1841,6 @@ public class MainActivity extends AppCompatActivity {
             );
             dateParams.setMargins(0, dp(6), 0, dp(14));
             content.addView(emptyDate, dateParams);
-
-            // brief §8：手写小字，每页最多 1~2 句，空状态这里用一句。
-            // 注意：Android 没有苹方，也没内嵌手写体（会明显增大 APK），
-            // 所以这里用系统字体 + 弱化的主色来近似"手写批注"的语气，不拿艺术字体冒充手写。
-            TextView emptyNote = new TextView(this);
-            emptyNote.setText("\u4eca\u5929\u4e5f\u53ef\u4ee5\u597d\u597d\u4f11\u606f\u4e00\u4e0b\u3002");
-            emptyNote.setTextSize(13);
-            emptyNote.setTypeface(appTypeface(Typeface.NORMAL));
-            emptyNote.setTextColor(withAlpha(accentColor(), isDarkMode ? 190 : 150));
-            emptyNote.setGravity(Gravity.CENTER);
-            emptyNote.setSingleLine(true);
-            LinearLayout.LayoutParams noteParams = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-            );
-            noteParams.setMargins(0, 0, 0, dp(22));
-            content.addView(emptyNote, noteParams);
 
             LinearLayout buttonRow = new LinearLayout(this);
             buttonRow.setOrientation(LinearLayout.HORIZONTAL);
