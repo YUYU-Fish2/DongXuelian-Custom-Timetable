@@ -10,3 +10,7 @@ secrets/*
 !secrets/release-signing.properties.template
 artifacts/
 dist/
+
+# APK 签名侧车文件（apksigner 生成，签名已内嵌于 APK，无需入库）
+*.idsig
+
