@@ -10,6 +10,17 @@
 - 运行环境：Android 6.0（API 23）及以上，针对 Android 16（API 36）构建
 - 版本历史：[docs/CHANGELOG.md](docs/CHANGELOG.md)
 
+## 界面预览
+
+| 课程表 | 无课状态 |
+| --- | --- |
+| ![课程表](docs/screenshots/main.png) | ![空状态](docs/screenshots/empty.png) |
+
+蓝白冬雪莲水彩视觉：整张 Hero 插画（人物与窗景同一张画，四边出血顶满状态栏），
+页面为连续的蓝白竖直渐变，左下/右下各有出血式水彩装饰；
+课程卡片按课程着色（节次徽章、描边与右下角科目插画），
+时间轴由时间、课程色圆点与一条贯穿竖线组成，进行中的课程带「当前」胶囊与倒计时。
+
 ## 功能特性
 
 **课程管理**
@@ -29,9 +40,9 @@
 - 提醒支持后续周次续排、开机/升级后重排、通知与精确闹钟权限被拒时自动降级
 
 **界面**
-- 三态主题切换：⏺ 自动（跟随系统）／☀ 浅色／🌙 深色
+- 浅色蓝白视觉（冬雪莲水彩主题），Hero 插画与页面渐变一体呈现
 - 今天用紫色标记并带圆点指示器，选中日期蓝色高亮
-- 节次微章、卡片阴影与统一对齐的布局
+- 节次徽章、卡片阴影与统一对齐的布局；空状态配雪莲花水彩插画
 
 ## 隐私与安全
 
@@ -93,7 +104,7 @@ app/build/outputs/apk/release/app-release.apk
 │   ├── ClassReminderReceiver.java     提醒触发与通知
 │   ├── ReminderBootReceiver.java      开机/升级后重排
 │   └── ImportException.java           导入失败的受检异常
-├── app/src/main/res/                  图标、配色（浅色/深色）、字符串、数据提取规则
+├── app/src/main/res/                  图标、配色、字符串、数据提取规则
 ├── gradle/wrapper/                    Gradle Wrapper
 ├── tools/                             构建、校验、审计与打包脚本 + 离线编译桩
 ├── docs/CHANGELOG.md                  变更与决策记录
