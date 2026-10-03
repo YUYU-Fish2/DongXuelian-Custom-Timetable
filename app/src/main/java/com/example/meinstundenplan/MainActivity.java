@@ -838,19 +838,21 @@ public class MainActivity extends AppCompatActivity {
      * 都加在滚动容器之前，所以课程卡片始终压在它们上面，装饰不会影响任何课程信息。
      */
     private void addPageDecorations(FrameLayout safeFrame) {
-        // 浓度说明：brief 给的 5%~20% 是相对"深色装饰压在浅底上"而言的。
-        // 这批素材本身是淡蓝白水彩，压在同样是淡蓝白的页面上，
-        // 10% 出头实测基本等于隐形（只剩一点影子）。
-        // 按反馈"要像 Hero 一样凸显"，已提到 62%~70%；素材端也把饱和/对比拉了一档。
-        // 注：deco_petal 现在是「一朵完整的小雪莲花」，文件名保留是为了不动已有引用。
+        // 按反馈"下方左右两边用更大的图案、更融洽"：
+        // 参考图里底部两角是大簇白花+叶子，并且**被屏幕边缘裁切**（不是完整摆进去）。
+        // 所以这里放大到 90~150dp 并给出负 margin，让它们自然出血到画面之外，
+        // 体量感和参考图一致；safeFrame 的 setClipChildren(true) 会在屏幕边缘裁切。
         addDecoration(safeFrame, R.drawable.deco_star,
                 Gravity.TOP | Gravity.START, 28, 104, 8, 0.64f);
+        // 左下角：雪莲花（主体，向左出血）
         addDecoration(safeFrame, R.drawable.deco_petal,
-                Gravity.BOTTOM | Gravity.START, 50, 104, 10, 0.70f);
+                Gravity.BOTTOM | Gravity.START, 124, 46, -20, 0.72f);
+        // 左下角：叶子（压在雪莲旁，向下出血）
         addDecoration(safeFrame, R.drawable.deco_leaf,
-                Gravity.BOTTOM | Gravity.START, 58, 22, 4, 0.64f);
+                Gravity.BOTTOM | Gravity.START, 96, -14, 60, 0.62f);
+        // 右下角：云（向右下出血）
         addDecoration(safeFrame, R.drawable.deco_cloud,
-                Gravity.BOTTOM | Gravity.END, 86, 34, 4, 0.62f);
+                Gravity.BOTTOM | Gravity.END, 152, -18, -28, 0.66f);
     }
 
     /** 放一个纯装饰小图。四个方向都设 margin，实际由 gravity 决定用哪几个。 */
@@ -3527,6 +3529,16 @@ public class MainActivity extends AppCompatActivity {
 
         SwitchCompat toggle = new SwitchCompat(this);
         toggle.setChecked(checked);
+        // Material 的 Switch 默认取主题色，而本项目主题是 M3 默认调色板（primary 是紫色），
+        // 于是滑块会渲成紫色，和全 app 的蓝白体系不一致。这里显式指定滑块与轨道配色。
+        int thumbOff = isDarkMode ? Color.rgb(120, 128, 140) : Color.rgb(196, 204, 218);
+        int trackOff = isDarkMode ? Color.rgb(58, 66, 78) : Color.rgb(226, 232, 240);
+        toggle.setThumbTintList(new ColorStateList(
+                new int[][]{ new int[]{android.R.attr.state_checked}, new int[]{} },
+                new int[]{ accentColor(), thumbOff }));
+        toggle.setTrackTintList(new ColorStateList(
+                new int[][]{ new int[]{android.R.attr.state_checked}, new int[]{} },
+                new int[]{ withAlpha(accentColor(), 120), trackOff }));
         toggle.setContentDescription(titleText);
         toggle.setOnCheckedChangeListener(listener);
         toggle.setClickable(false);
