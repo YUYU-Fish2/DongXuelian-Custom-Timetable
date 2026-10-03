@@ -246,7 +246,6 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout statusChipMetaRow;
     private android.widget.ImageView statusChipMetaIcon;
     private TextView statusChipMeta;
-    private ImageButton themeToggle;
     private View settingsOverlay;
     private int selectedDay = 0;
     private int viewingWeek = 0; // 0=跟随真实当前周；非 0=预览该周
@@ -526,27 +525,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void applyAppNightMode() {
-        int savedMode = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getInt(THEME_KEY, 0);
-        int nightMode;
-        if (savedMode == 2) {
-            nightMode = AppCompatDelegate.MODE_NIGHT_YES;
-        } else if (savedMode == 1) {
-            nightMode = AppCompatDelegate.MODE_NIGHT_NO;
-        } else {
-            nightMode = AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM;
-        }
-        AppCompatDelegate.setDefaultNightMode(nightMode);
+        // 按用户指示：去掉暗模式，只保留亮模式。
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
     }
 
     private void loadThemeMode() {
-        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-        int savedMode = prefs.getInt(THEME_KEY, 0);
-        if (savedMode == 1 || savedMode == 2) {
-            themeMode = savedMode;
-        } else {
-            themeMode = isSystemDarkMode() ? 2 : 1;
-            prefs.edit().putInt(THEME_KEY, themeMode).apply();
-        }
+        // 按用户指示：去掉暗模式，强制亮模式。
+        themeMode = 1;
         applyThemeMode();
     }
 
@@ -570,9 +555,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void toggleTheme() {
-        themeMode = isDarkMode ? 1 : 2;
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putInt(THEME_KEY, themeMode).apply();
-        recreate();
+        // 已废弃：暗模式按用户指示移除，主题切换按钮也已删除，此方法无调用方。
     }
 
     @Override
@@ -1066,21 +1049,8 @@ public class MainActivity extends AppCompatActivity {
         }
         header.addView(actions, actionsParams);
 
-        // 主题切换按钮
-        themeToggle = new ImageButton(this);
-        themeToggle.setImageResource(isDarkMode ? R.drawable.ic_sun_outline : R.drawable.ic_moon_outline);
-        themeToggle.setImageTintList(ColorStateList.valueOf(accentColor()));
-        themeToggle.setScaleType(android.widget.ImageView.ScaleType.CENTER);
-        themeToggle.setContentDescription(isDarkMode ? "切换到亮色模式" : "切换到暗黑模式");
-        // 白底 + 1dp 细描边 + 轻阴影，和周次箭头、卡片 ••• 统一成同一种语言
-        themeToggle.setBackground(elevatedCardBackground(cardColor(), dp(ACTION_BUTTON_SIZE_DP / 2)));
-        themeToggle.setElevation(dp(ELEVATION_SOFT));
-        themeToggle.setPadding(dp(10), dp(10), dp(10), dp(10));
-        themeToggle.setOnClickListener(view -> toggleTheme());
-        LinearLayout.LayoutParams themeParams = new LinearLayout.LayoutParams(dp(actionButtonSize), dp(actionButtonSize));
-        themeParams.setMargins(0, 0, dp(10), 0);
-        actions.addView(themeToggle, themeParams);
-
+        // 主题切换按钮已移除：按用户指示去掉暗模式、只保留亮模式后，
+        // 这颗月牙钮不再有任何功能，留着只会误导（点它没反应）。
         ImageButton settingsButton = new ImageButton(this);
         settingsButton.setImageResource(R.drawable.ic_settings_outline);
         settingsButton.setImageTintList(ColorStateList.valueOf(accentColor()));
@@ -1810,7 +1780,7 @@ public class MainActivity extends AppCompatActivity {
             emptyArt.setImageResource(R.drawable.empty_art);
             emptyArt.setScaleType(ImageView.ScaleType.FIT_CENTER);
             emptyArt.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            content.addView(emptyArt, new LinearLayout.LayoutParams(dp(168), dp(252)));
+            content.addView(emptyArt, new LinearLayout.LayoutParams(dp(170), dp(157)));
 
             TextView emptyTitle = new TextView(this);
             emptyTitle.setText("今天没有课程");
@@ -2033,18 +2003,22 @@ public class MainActivity extends AppCompatActivity {
         row.addView(gutter, new LinearLayout.LayoutParams(
                 dp(gutterWidthDp), ViewGroup.LayoutParams.MATCH_PARENT));
 
-        int dotSizeDp = current ? 9 : 6;
+        // 圆点尺寸必须取偶数：rightMargin = INSET - dotSize/2 依赖整除，
+        // 奇数（如 9）会丢 0.5dp，导致圆点圆心和竖线中心错开半个像素。
+        int dotSizeDp = current ? 8 : 6;
         if (!(isFirst && isLast)) {
             View line = new View(this);
             line.setBackgroundColor(borderColor());
             // 末行的线在圆点处收住；其余行贯穿整行（含行内 padding），与下一行自然相接。
             // 靠右对齐 + rightMargin，让竖线正好穿过圆点中心。
+            // 竖线取 2dp：1dp 线的中心落在半 dp 上，永远无法和整 dp 的圆点圆心对齐。
+            // 2dp 时线中心 = W - rightMargin - 1，与圆点圆心（= W - INSET）精确相等。
             FrameLayout.LayoutParams lineParams = new FrameLayout.LayoutParams(
-                    dp(1),
+                    dp(2),
                     isLast ? dp(TIMELINE_DOT_TOP_DP + dotSizeDp / 2)
                            : ViewGroup.LayoutParams.MATCH_PARENT,
                     Gravity.END);
-            lineParams.rightMargin = dp(TIMELINE_LINE_INSET_DP);
+            lineParams.rightMargin = dp(TIMELINE_LINE_INSET_DP - 1);
             if (isFirst) {
                 lineParams.topMargin = dp(TIMELINE_DOT_TOP_DP);
             }
@@ -2159,10 +2133,11 @@ public class MainActivity extends AppCompatActivity {
             ));
         }
 
-        // 右下角小插画（仅小物件，人物只出现在 Hero 区）。
+        // 插画浓度：所有卡片（含当前课）统一用 COURSE_ART_ALPHA（0.95），
+        // 与预览模式一致；不再按 active 压低，也不再上色滤镜（色滤会把水彩变成单色剪影）。
         android.widget.ImageView courseArt = new android.widget.ImageView(this);
         courseArt.setImageResource(courseArtResId(course));
-        courseArt.setAlpha(active ? 0.20f : COURSE_ART_ALPHA);
+        courseArt.setAlpha(COURSE_ART_ALPHA);
         courseArt.setScaleType(android.widget.ImageView.ScaleType.FIT_END);
         courseArt.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         FrameLayout.LayoutParams artParams = new FrameLayout.LayoutParams(
