@@ -2008,7 +2008,10 @@ public class MainActivity extends AppCompatActivity {
         int dotSizeDp = current ? 8 : 6;
         if (!(isFirst && isLast)) {
             View line = new View(this);
-            line.setBackgroundColor(borderColor());
+            // 竖线要"看得见"：原来用 borderColor()（#DDE4EE），和页面背景 #F0F5FE
+            // 只差 ~15/255，真机上几乎隐形（用户照片里三颗圆点之间看不到线）。
+            // 加深一档让它成为可辨识的时间轴，但仍远轻于卡片描边。
+            line.setBackgroundColor(Color.rgb(191, 203, 224));
             // 末行的线在圆点处收住；其余行贯穿整行（含行内 padding），与下一行自然相接。
             // 靠右对齐 + rightMargin，让竖线正好穿过圆点中心。
             // 竖线取 2dp：1dp 线的中心落在半 dp 上，永远无法和整 dp 的圆点圆心对齐。
@@ -2348,8 +2351,11 @@ public class MainActivity extends AppCompatActivity {
         // 实测它会把卡片填充色、彩色描边和右下角插画全部糊掉，整列看过去是一片灰紫。
         // 现在不再压灰罩：已完成的课程靠"时间轴圆点降饱和 + 插画减淡"来区分，
         // 卡片本身保持和其它课程一样的通透度。
+        // 已完成课程不再压灰罩，靠"时间轴圆点降饱和 + 插画减淡"区分。
+        // 插画减淡原来取 0.10（实测等于隐形，用户照片里三张卡两张看不到图案），
+        // 提到 0.40：仍明显弱于普通卡的 0.95，但图案能认出来。
         if (completed) {
-            courseArt.setAlpha(0.10f);
+            courseArt.setAlpha(0.40f);
         }
         boolean approaching = temporalState == TimetableRules.TemporalState.REMINDER_WINDOW;
         boolean shakeEnabled = approaching && animationsEnabled();
