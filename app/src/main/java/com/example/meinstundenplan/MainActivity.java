@@ -793,6 +793,26 @@ public class MainActivity extends AppCompatActivity {
         sceneParams.rightMargin = -bleedSidePx;
         safeFrame.addView(scene, sceneParams);
 
+        // 浅色模式下 Hero 顶部左侧是标题与副标题的落点，而 Hero 图的窗户/天空很亮，
+        // 副标题用 secondaryTextColor() 弱色直接压上去会被亮图"吃掉"（预览模式实测几乎看不见）。
+        // 给左上半区叠一层白色渐变蒙版：上最重（标题/副标题就在那里），向下向右逐渐放开，
+        // 不影响画面主体，但文字立刻可读。深色模式继续用下面的暗色蒙版。
+        if (!isDarkMode) {
+            View lightScrim = new View(this);
+            lightScrim.setBackground(new GradientDrawable(
+                    GradientDrawable.Orientation.TL_BR,
+                    new int[]{0xD9FFFFFF, 0x8CFFFFFF, 0x00FFFFFF}));
+            lightScrim.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            FrameLayout.LayoutParams lightScrimParams = new FrameLayout.LayoutParams(
+                    dp(Math.round(getResources().getDisplayMetrics().widthPixels
+                            / getResources().getDisplayMetrics().density * 0.72f)),
+                    dp(Math.round(heroHeightDp * 1.1f)) + bleedTopPx,
+                    Gravity.TOP | Gravity.START);
+            lightScrimParams.topMargin = -bleedTopPx;
+            lightScrimParams.leftMargin = -bleedSidePx;
+            safeFrame.addView(lightScrim, lightScrimParams);
+        }
+
         // 深色模式下 Hero 仍是一张白天的亮图，直接铺上去会整块发亮，
         // 白色标题压在亮天空上根本读不清。叠一层自上而下的暗色蒙版把它压下来：
         // 顶部最重（标题就在那里），向下逐渐放开，保留画面但不抢文字。
@@ -937,29 +957,6 @@ public class MainActivity extends AppCompatActivity {
                 ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                 : new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         header.addView(titleBlock, titleBlockParams);
-
-        // 效果图标题前有一个小花标（纯氛围，不承载任何功能信息）
-        LinearLayout titleRow = new LinearLayout(this);
-        titleRow.setOrientation(LinearLayout.HORIZONTAL);
-        titleRow.setGravity(Gravity.CENTER_VERTICAL);
-
-        android.widget.ImageView titleFlower = new android.widget.ImageView(this);
-        titleFlower.setImageResource(R.drawable.deco_petal);
-        titleFlower.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
-        titleFlower.setAlpha(0.6f);
-        titleFlower.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LinearLayout.LayoutParams titleFlowerParams = new LinearLayout.LayoutParams(dp(23), dp(23));
-        titleFlowerParams.setMargins(0, 0, dp(6), 0);
-        titleRow.addView(titleFlower, titleFlowerParams);
-
-        TextView title = new TextView(this);
-        title.setText("我的课表");
-        title.setTextColor(primaryTextColor());
-        title.setTextSize(compact ? 28 : 32);
-        title.setTypeface(appTypeface(Typeface.BOLD));
-        title.setLetterSpacing(0f);
-        titleRow.addView(title);
-        titleBlock.addView(titleRow);
 
         summaryText = new TextView(this);
         summaryText.setTextColor(secondaryTextColor());
@@ -1281,7 +1278,7 @@ public class MainActivity extends AppCompatActivity {
 
         String label;
         if (previewMode) {
-            label = "预览模式 · 点按回到本周";
+            label = "预览模式";
         } else if (ongoing) {
             label = "正在上课";
         } else if (hasCourse) {
@@ -2162,12 +2159,9 @@ public class MainActivity extends AppCompatActivity {
             ));
         }
 
-        // 右下角极淡小插画（仅小物件，人物只出现在 Hero 区）。
-        // 加在 card 之前，因此渲染在文字下层；15% 透明度不影响可读性。
+        // 右下角小插画（仅小物件，人物只出现在 Hero 区）。
         android.widget.ImageView courseArt = new android.widget.ImageView(this);
         courseArt.setImageResource(courseArtResId(course));
-        // 效果图里插画占卡片右侧约三分之一、浓度明显，是卡片的主要装饰；
-        // 之前 15% 太淡，整张卡片看起来是空的。
         courseArt.setAlpha(active ? 0.20f : COURSE_ART_ALPHA);
         courseArt.setScaleType(android.widget.ImageView.ScaleType.FIT_END);
         courseArt.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
