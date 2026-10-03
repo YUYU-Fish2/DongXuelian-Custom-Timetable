@@ -1961,8 +1961,13 @@ public class MainActivity extends AppCompatActivity {
         // gutter 50dp：时间和圆点要排在同一行（效果图是 "08:00 ●"），比原来纵向堆叠更占宽。
         // 再多就会把卡片里的周次和地点挤成省略号。
         int gutterWidthDp = compact ? 50 : 58;
-        row.addView(gutter, new LinearLayout.LayoutParams(
-                dp(gutterWidthDp), ViewGroup.LayoutParams.MATCH_PARENT));
+        LinearLayout.LayoutParams gutterParams = new LinearLayout.LayoutParams(
+                dp(gutterWidthDp), ViewGroup.LayoutParams.MATCH_PARENT);
+        // 关键：row 有 gapDp 的底部 padding，而 MATCH_PARENT 不含 padding 区——
+        // 竖线会在每两张卡片之间断开 gapDp（实测 12dp 一段，用户指出的"空缺"）。
+        // 负 bottomMargin 抵消 padding，让 gutter（和其中的竖线）贯穿到下一行的圆点。
+        gutterParams.bottomMargin = -dp(gapDp);
+        row.addView(gutter, gutterParams);
 
         // 圆点尺寸必须取偶数：rightMargin = INSET - dotSize/2 依赖整除，
         // 奇数（如 9）会丢 0.5dp，导致圆点圆心和竖线中心错开半个像素。
@@ -1999,8 +2004,11 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout clockRow = new LinearLayout(this);
         clockRow.setOrientation(LinearLayout.HORIZONTAL);
         clockRow.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        // 固定高度 = 2 * TIMELINE_DOT_TOP_DP，让圆点（垂直居中）的圆心精确落在 8dp，
+        // 与竖线首行的 topMargin(8dp) 对齐 —— 否则圆点圆心在时钟行高度一半(~6dp)，
+        // 和竖线起点差 2dp，形成"点对不进空缺"的错位。
         clockRow.setLayoutParams(new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(TIMELINE_DOT_TOP_DP * 2)));
 
         TextView clock = new TextView(this);
         clock.setText(clockText(courseStartMinutes(course)));
