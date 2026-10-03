@@ -8,6 +8,7 @@
 
 - 当前版本：`1.2.2`（`versionCode 5`）
 - 运行环境：Android 6.0（API 23）及以上，针对 Android 16（API 36）构建
+- 预编译安装包：[releases/mein-stundenplan-v1.2.2.apk](releases/mein-stundenplan-v1.2.2.apk)
 - 版本历史：[docs/CHANGELOG.md](docs/CHANGELOG.md)
 
 ## 界面预览
