@@ -9,7 +9,7 @@
 ## 执行顺序与阶段门禁
 
 P0 → P1 → P2 → P3 → P4 → P5 → P6 → P7 → P8 → P8.5 → P9。
-每次只完成一个阶段：编译 → 指定自动回归 → 真机截图 → 用户确认 → 独立 Commit → 下一阶段。遮挡、裁切、日期错误或交互回归必须先修复，不得跳过确认。P6 用户选择后才锁定透明度。当前文档落盘不代表任何实现、构建或测试已完成。
+每次只完成一个阶段：编译 → 指定自动回归 → 真机截图 → 自主对照参考图验收 → 独立 Commit → 下一阶段（按顶部用户最新授权执行）。遮挡、裁切、日期错误或交互回归必须先修复。P6 由代理选择并记录透明度。
 
 ## P0：逻辑与视觉基线冻结
 
@@ -78,7 +78,7 @@ P0 → P1 → P2 → P3 → P4 → P5 → P6 → P7 → P8 → P8.5 → P9。
 Y = anchorTop + progress × (anchorBottom − anchorTop)
 
 课间：gapProgress = clamp((now − prevEnd) / (nextStart − prevEnd), 0, 1)
-Y = prevAnchorBottom + gapProgress × (nextAnchorTop − prevAnchorBottom)
+Y = prevCardBottom + gapProgress × (nextCardTop − prevCardBottom)（课间取真实卡片边界，用户要求标记留白；课中仍用有效锚点）
 
 首课前 clamp 到 timetable top；末课后 clamp 到 timetable bottom，不向列表外外推。空列表不构造比例轴；无效/零时长区间不得除零，隐藏该位置并记录验证失败。
 
@@ -1293,3 +1293,7 @@ warning
 最终目标不是单纯“换漂亮图标”，而是：
 
 > **让 Hero、课程卡、设置页、时间轴看起来像同一个设计师、同一个产品、同一套 Design System 做出来的。**
+
+## 执行结果（2026-10-04）
+
+P0–P9 已分阶段实施验收；P9 收口及最终验证记录见 docs/P9-validation.md。用户最新日期区参考：加粗一行日期+小号独立周范围，导航箭头移至周选择面板。原人工确认与P6选择条款由顶部自主验收授权覆盖。

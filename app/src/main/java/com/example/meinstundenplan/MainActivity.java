@@ -108,7 +108,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int CONTENT_SIDE_MARGIN_DP = 28;
     // Hero 区角色插画。置 false 即回到"无人物版"：去掉人物后版式依然完整可编译。
     private static final boolean SHOW_HERO_CHARACTER = true;
-    // Hero 高度硬上限：不超过屏高的 22%，避免压缩课表可视空间。
+    // Hero 高度硬上限：不超过屏高的 19%，避免压缩课表可视空间。
     private static final int HERO_CHARACTER_MAX_HEIGHT_DP = 150;
     private static final float HERO_TARGET_HEIGHT_RATIO = 0.19f;
     // Initial visual scale; validate cropping within the approved 1.18–1.26 range.
@@ -116,6 +116,17 @@ public class MainActivity extends AppCompatActivity {
     // 课程卡片右下角小插画的透明度。
     // 按反馈"要像 Hero 一样凸显"，已提到接近满不透明；素材端也把饱和/对比拉了一档。
     // 插画绘制在文字下层，且位于右下角，长文本省略时也不会盖住可读内容。
+    // UI v2 shared tokens; dimensions in dp, text in sp.
+    private static final int TOUCH_TARGET_DP = 44;
+    private static final int SETTINGS_VISUAL_DP = 38;
+    private static final int ADD_VISUAL_DP = 42;
+    private static final int MORE_VISUAL_DP = 36;
+    private static final int META_ICON_DP = 13;
+    private static final int HEADER_TEXT_SP = 18;
+    private static final int AUX_TEXT_SP = 11;
+    private static final int NEXT_NAME_SP = 20;
+    private static final float COUNTDOWN_NUMBER_SCALE = 2f;
+    private static final float NEXT_ART_ALPHA = 0.12f;
     private static final float COURSE_ART_ALPHA_NORMAL = 0.45f;
     private static final float COURSE_ART_ALPHA_COMPLETED = 0.30f;
     // Instrumentation-only overrides; ignored outside the isolated debug validation package.
@@ -248,7 +259,6 @@ public class MainActivity extends AppCompatActivity {
     private final List<View> timelineRows = new ArrayList<>();
     private final List<Course> timelineCourses = new ArrayList<>();
     private float currentTimeY;
-    private boolean currentTimeInGap;
 
     private TextView summaryText;
     // 「下一节」胶囊（brief §7 三层）：容器 + 四段子视图
@@ -273,6 +283,8 @@ public class MainActivity extends AppCompatActivity {
     private ImageButton weekNextButton;
     private TextView weekLiveBadge;
     private LinearLayout weekNavRow;
+    private FrameLayout statusSurface;
+    private android.widget.ImageView statusArt;
     private AlertDialog weekPickerDialog;
     private HorizontalScrollView dayScroll;
     private int lastAutoScrolledDay = -1;
@@ -920,7 +932,7 @@ public class MainActivity extends AppCompatActivity {
 
         summaryText = new TextView(this);
         summaryText.setTextColor(primaryTextColor());
-        summaryText.setTextSize(18);
+        summaryText.setTextSize(HEADER_TEXT_SP);
         summaryText.setTypeface(appTypeface(Typeface.BOLD));
         summaryText.setAlpha(1f);
         summaryText.setSingleLine(false);
@@ -967,7 +979,7 @@ public class MainActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         dateParams.topMargin = dp(6);
         statusChip.addView(statusChipDate, dateParams);
-        statusChipName = statusChipText(compact ? 18 : 19, true);
+        statusChipName = statusChipText(NEXT_NAME_SP, true);
         LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         nameParams.topMargin = dp(7);
@@ -1019,9 +1031,9 @@ public class MainActivity extends AppCompatActivity {
         settingsButton.setElevation(dp(ELEVATION_SOFT));
         settingsButton.setPadding(dp(7), dp(7), dp(7), dp(7));
         settingsButton.setOnClickListener(view -> showSettingsDialogV2());
-        LinearLayout.LayoutParams settingsParams = new LinearLayout.LayoutParams(dp(44), dp(44));
+        LinearLayout.LayoutParams settingsParams = new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP));
         settingsParams.setMargins(0, 0, dp(10), 0);
-        actions.addView(touchContainer(settingsButton, 38), settingsParams);
+        actions.addView(touchContainer(settingsButton, SETTINGS_VISUAL_DP), settingsParams);
 
         ImageButton addButton = new ImageButton(this);
         addButton.setImageResource(R.drawable.ic_plus);
@@ -1033,12 +1045,20 @@ public class MainActivity extends AppCompatActivity {
         addButton.setElevation(dp(ELEVATION_SOFT));
         addButton.setPadding(dp(11), dp(11), dp(11), dp(11));
         addButton.setOnClickListener(view -> showCourseDialog(null));
-        actions.addView(touchContainer(addButton, 42), new LinearLayout.LayoutParams(dp(44), dp(44)));
+        actions.addView(touchContainer(addButton, ADD_VISUAL_DP), new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP)));
 
         LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         statusParams.setMargins(dp(sideMargin), dp(8), dp(sideMargin), 0);
-        root.addView(statusChip, statusParams);
+        statusSurface = new FrameLayout(this);
+        statusArt = new android.widget.ImageView(this);
+        statusArt.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        statusArt.setAlpha(NEXT_ART_ALPHA);
+        statusArt.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        FrameLayout.LayoutParams statusArtParams = new FrameLayout.LayoutParams(dp(116), dp(100), Gravity.END | Gravity.BOTTOM);
+        statusSurface.addView(statusArt, statusArtParams);
+        statusSurface.addView(statusChip, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(statusSurface, statusParams);
 
         // 周切换导航条：‹ 第N周·日期范围 › [回到本周]
         weekNavRow = new LinearLayout(this);
@@ -1063,12 +1083,12 @@ public class MainActivity extends AppCompatActivity {
         weekPrevButton.setElevation(dp(ELEVATION_SOFT));
         weekPrevButton.setPadding(dp(9), dp(9), dp(9), dp(9));
         weekPrevButton.setOnClickListener(view -> { if (weekPickerDialog != null) weekPickerDialog.dismiss(); stepViewingWeek(-1); });
-        LinearLayout.LayoutParams weekPrevParams = new LinearLayout.LayoutParams(dp(44), dp(44));
+        LinearLayout.LayoutParams weekPrevParams = new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP));
         weekPrevParams.setMargins(0, 0, dp(4), 0);
         touchContainer(weekPrevButton, 32);
 
         weekRangeText = new TextView(this);
-        weekRangeText.setTextSize(11);
+        weekRangeText.setTextSize(AUX_TEXT_SP);
         weekRangeText.setTypeface(appTypeface(Typeface.NORMAL));
         weekRangeText.setTextColor(primaryTextColor());
         weekRangeText.setGravity(Gravity.START | Gravity.TOP);
@@ -1076,7 +1096,7 @@ public class MainActivity extends AppCompatActivity {
         weekRangeText.setEllipsize(TextUtils.TruncateAt.END);
         weekRangeText.setIncludeFontPadding(false);
         weekRangeText.setPadding(0, 0, 0, 0);
-        weekRangeText.setMinimumHeight(dp(44));
+        weekRangeText.setMinimumHeight(dp(TOUCH_TARGET_DP));
         weekRangeText.setBackground(null);
         weekRangeText.setContentDescription("选择周次");
         weekRangeText.setOnClickListener(view -> showWeekPickerDialog());
@@ -1093,7 +1113,7 @@ public class MainActivity extends AppCompatActivity {
         weekNextButton.setElevation(dp(ELEVATION_SOFT));
         weekNextButton.setPadding(dp(9), dp(9), dp(9), dp(9));
         weekNextButton.setOnClickListener(view -> { if (weekPickerDialog != null) weekPickerDialog.dismiss(); stepViewingWeek(1); });
-        LinearLayout.LayoutParams weekNextParams = new LinearLayout.LayoutParams(dp(44), dp(44));
+        LinearLayout.LayoutParams weekNextParams = new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP));
         weekNextParams.setMargins(dp(4), 0, dp(4), 0);
         touchContainer(weekNextButton, 32);
 
@@ -1106,13 +1126,13 @@ public class MainActivity extends AppCompatActivity {
         weekLiveBadge.setIncludeFontPadding(false);
         weekLiveBadge.setContentDescription("返回本周");
         weekLiveBadge.setPadding(dp(6), dp(4), dp(6), dp(4));
-        weekLiveBadge.setMinimumHeight(dp(44));
+        weekLiveBadge.setMinimumHeight(dp(TOUCH_TARGET_DP));
         weekLiveBadge.setBackground(interactiveTranslucentBackground(
                 withAlpha(accentColor(), isDarkMode ? 64 : 34), dp(14)));
         weekLiveBadge.setOnClickListener(view -> returnToCurrentWeek());
         weekLiveBadge.setVisibility(View.GONE);
         weekNavRow.addView(weekLiveBadge, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)));
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(TOUCH_TARGET_DP)));
 
         HorizontalScrollView dayScroll = new HorizontalScrollView(this);
         this.dayScroll = dayScroll;
@@ -1121,7 +1141,7 @@ public class MainActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
-        dayScrollParams.setMargins(dp(sideMargin), dp(compact ? 8 : 10), dp(sideMargin), dp(16));
+        dayScrollParams.setMargins(dp(sideMargin), dp(compact ? 8 : 10), dp(sideMargin), dp(8));
         root.addView(dayScroll, dayScrollParams);
 
         dayTabFrame = new FrameLayout(this);
@@ -1145,7 +1165,7 @@ public class MainActivity extends AppCompatActivity {
         courseList.setOrientation(LinearLayout.VERTICAL);
         courseList.setClipChildren(false);
         courseList.setClipToPadding(false);
-        courseList.setPadding(0, dp(12), 0, dp(18));
+        courseList.setPadding(0, dp(4), 0, dp(18));
         timelineContainer = new FrameLayout(this);
         timelineContainer.addView(courseList, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         currentTimeOverlay = new CurrentTimeOverlay();
@@ -1196,7 +1216,7 @@ public class MainActivity extends AppCompatActivity {
     /** Separate visual size from the actual, accessible touch target. */
     private FrameLayout touchContainer(ImageButton button, int visualSizeDp) {
         FrameLayout target = new FrameLayout(this);
-        target.setMinimumWidth(dp(44)); target.setMinimumHeight(dp(44));
+        target.setMinimumWidth(dp(TOUCH_TARGET_DP)); target.setMinimumHeight(dp(TOUCH_TARGET_DP));
         target.setContentDescription(button.getContentDescription());
         target.setFocusable(true);
         target.setOnClickListener(view -> { if (button.isEnabled()) button.performClick(); });
@@ -1275,7 +1295,13 @@ public class MainActivity extends AppCompatActivity {
         }
         boolean detail = shown != null;
         statusChipLabel.setText(label);
-        statusChipCountdown.setText(countdown);
+        android.text.SpannableString emphasizedCountdown = new android.text.SpannableString(countdown);
+        java.util.regex.Matcher digits = java.util.regex.Pattern.compile("[0-9]+").matcher(countdown);
+        if (digits.find()) {
+            emphasizedCountdown.setSpan(new android.text.style.RelativeSizeSpan(COUNTDOWN_NUMBER_SCALE), digits.start(), digits.end(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            emphasizedCountdown.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), digits.start(), digits.end(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        statusChipCountdown.setText(emphasizedCountdown);
         statusChipCountdown.setVisibility(countdown.isEmpty() ? View.GONE : View.VISIBLE);
         boolean futureDate = detail && !ongoing && next != null && !nextToday;
         statusChipDate.setText(futureDate ? (beforeSemester ? "首课 · " : "下一节 · ")
@@ -1292,9 +1318,11 @@ public class MainActivity extends AppCompatActivity {
         statusChipMetaRow.setVisibility(detail ? View.VISIBLE : View.GONE);
         int tint = ongoing || detail || previewMode ? accentColor() : secondaryTextColor();
         float amount = ongoing || previewMode ? 0.10f : 0.04f;
-        statusChip.setBackground(verticalGradientBackground(
+        statusSurface.setBackground(verticalGradientBackground(
                 mixColor(cardColor(), tint, amount),
                 mixColor(cardColor(), tint, amount * 1.6f), dp(18)));
+        statusArt.setVisibility(detail ? View.VISIBLE : View.GONE);
+        if (detail) statusArt.setImageResource(courseArtResId(shown));
         statusChipLabel.setTextColor(tint);
         statusChipIcon.setImageTintList(ColorStateList.valueOf(tint));
         statusChipCountdown.setTextColor(accentColor());
@@ -1411,11 +1439,11 @@ public class MainActivity extends AppCompatActivity {
         View nextTarget = (View) weekNextButton.getParent();
         if (prevTarget.getParent() != null) ((ViewGroup) prevTarget.getParent()).removeView(prevTarget);
         if (nextTarget.getParent() != null) ((ViewGroup) nextTarget.getParent()).removeView(nextTarget);
-        pickerNav.addView(prevTarget, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        pickerNav.addView(prevTarget, new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP)));
         TextView pickerTitle = new TextView(this); pickerTitle.setText("选择周次");
         pickerTitle.setTextColor(primaryTextColor()); pickerTitle.setTextSize(16); pickerTitle.setGravity(Gravity.CENTER);
-        pickerNav.addView(pickerTitle, new LinearLayout.LayoutParams(0, dp(44), 1f));
-        pickerNav.addView(nextTarget, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        pickerNav.addView(pickerTitle, new LinearLayout.LayoutParams(0, dp(TOUCH_TARGET_DP), 1f));
+        pickerNav.addView(nextTarget, new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP)));
         picker.addView(pickerNav);
 
         final AlertDialog[] dialogRef = new AlertDialog[1];
@@ -1594,14 +1622,14 @@ public class MainActivity extends AppCompatActivity {
             boolean isSelected = day == selectedDay;
 
             if (isSelected) {
-                textColor = accentColor();
+                textColor = Color.WHITE;
             } else if (isToday) {
                 textColor = todayColor();
             } else {
                 textColor = secondaryTextColor();
             }
 
-            tabContainer.setBackground(buttonBackground(Color.TRANSPARENT, dp(18)));
+            tabContainer.setBackground(buttonBackground(isSelected ? Color.TRANSPARENT : Color.argb(120, 255, 255, 255), dp(18)));
             tabContainer.setSelected(isSelected);
             tabContainer.setContentDescription(DAYS[i] + "，" + formatDate(displayedDate)
                     + (isToday ? "\uff0c\u4eca\u5929" : "")
@@ -1631,7 +1659,7 @@ public class MainActivity extends AppCompatActivity {
 
             // 今天添加小圆点指示器，颜色跟随文字状态
             View todayMarker = new View(this);
-            int markerColor = isSelected ? accentColor() : todayColor();
+            int markerColor = isSelected ? Color.WHITE : todayColor();
             todayMarker.setBackground(buttonBackground(isToday ? markerColor : Color.TRANSPARENT, dp(3)));
             LinearLayout.LayoutParams markerParams = new LinearLayout.LayoutParams(dp(5), dp(5));
             markerParams.setMargins(0, dp(4), 0, 0);
@@ -1721,7 +1749,7 @@ public class MainActivity extends AppCompatActivity {
         params.height = selectedTab.getHeight();
         daySelectionSlider.setLayoutParams(params);
         // brief §6：选中态是"浅蓝紫药丸 + 蓝字 + 下方圆点"，不要描边
-        daySelectionSlider.setBackground(roundedSurface(selectedDayColor(), dp(20), Color.TRANSPARENT));
+        daySelectionSlider.setBackground(roundedSurface(accentColor(), dp(20), Color.TRANSPARENT));
 
         float target = selectedTab.getLeft();
         daySelectionSlider.animate().cancel();
@@ -1942,6 +1970,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateCurrentTimeLine() {
         if (currentTimeOverlay == null) return;
+        for (View row : timelineRows) {
+            View clock = row.findViewWithTag("timeline-start-clock");
+            if (clock != null) clock.setVisibility(View.VISIBLE);
+        }
         int week = displayedViewingWeek();
         long date = displayedDateMillis(week, selectedDay);
         if (viewingWeek != 0 || week != currentTeachingWeek() || date != startOfTodayMillis()
@@ -1956,7 +1988,6 @@ public class MainActivity extends AppCompatActivity {
             }
             previousStart = courseStartMinutes(course);
         }
-        currentTimeInGap = false;
         currentTimeY = timelineAnchorBottom(timelineRows.size() - 1);
         for (int i = 0; i < timelineCourses.size(); i++) {
             Course course = timelineCourses.get(i);
@@ -1969,7 +2000,6 @@ public class MainActivity extends AppCompatActivity {
                     currentTimeY = timelinePosition(now, previousEnd, start,
                             courseList.getTop() + timelineRows.get(i - 1).getBottom() - timelineRows.get(i - 1).getPaddingBottom(),
                             courseList.getTop() + timelineRows.get(i).getTop());
-                    currentTimeInGap = true;
                 }
                 break;
             }
@@ -1977,6 +2007,11 @@ public class MainActivity extends AppCompatActivity {
                 currentTimeY = timelinePosition(now, start, end, timelineAnchorTop(i), timelineAnchorBottom(i));
                 break;
             }
+        }
+        int clearance = dp((int) Math.ceil(AUX_TEXT_SP * getResources().getConfiguration().fontScale + 4));
+        for (int i = 0; i < timelineRows.size(); i++) if (Math.abs(currentTimeY - timelineAnchorTop(i)) < clearance) {
+            View clock = timelineRows.get(i).findViewWithTag("timeline-start-clock");
+            if (clock != null) clock.setVisibility(View.INVISIBLE);
         }
         currentTimeOverlay.setVisibility(View.VISIBLE);
         currentTimeOverlay.setContentDescription(clockText(currentMinutes()) + "，现在");
@@ -2010,9 +2045,9 @@ public class MainActivity extends AppCompatActivity {
             canvas.drawCircle(x, y, dp(3), paint);
             paint.setTypeface(appTypeface(Typeface.BOLD)); paint.setTextSize(11 * getResources().getDisplayMetrics().scaledDensity);
             String time = clockText(currentMinutes());
-            // Place the label above an existing start-time label instead of covering it.
-            float baseline = y + dp(4);
-            for (int i = 0; i < timelineRows.size(); i++) if (Math.abs(y - timelineAnchorTop(i)) < dp(16)) baseline = y - dp(10);
+            // Near a course-start anchor the redundant gutter label is hidden;
+            // the full course time stays visible inside the card.
+            float baseline = y - (paint.ascent() + paint.descent()) / 2;
             canvas.drawText(time, Math.max(dp(1), x - dp(7) - paint.measureText(time)), baseline, paint);
             if (blank) {
                 android.graphics.RectF tag = new android.graphics.RectF(getWidth() - dp(35), y - dp(8), getWidth() - dp(3), y + dp(8));
@@ -2106,11 +2141,11 @@ public class MainActivity extends AppCompatActivity {
 
         // 图标与字号都收到 11：时间轴改成"时间+圆点"同行后 gutter 加宽到 50dp，
         // 详情行必须再紧一档，才能把"锡科503"这类地点完整放下。
-        group.addView(iconView(iconResId, color, 13, dp(4)));
+        group.addView(iconView(iconResId, color, META_ICON_DP, dp(4)));
 
         TextView label = new TextView(this);
         label.setText(text);
-        label.setTextSize(11);
+        label.setTextSize(AUX_TEXT_SP);
         label.setTypeface(appTypeface(Typeface.NORMAL));
         label.setTextColor(color);
         label.setIncludeFontPadding(false);
@@ -2212,8 +2247,9 @@ public class MainActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(TIMELINE_DOT_TOP_DP * 2)));
 
         TextView clock = new TextView(this);
+        clock.setTag("timeline-start-clock");
         clock.setText(clockText(courseStartMinutes(course)));
-        clock.setTextSize(11);
+        clock.setTextSize(AUX_TEXT_SP);
         clock.setTypeface(current ? appTypefaceMedium() : appTypeface(Typeface.NORMAL));
         clock.setTextColor(current ? accentColor() : secondaryTextColor());
         clock.setIncludeFontPadding(false);
@@ -2278,7 +2314,7 @@ public class MainActivity extends AppCompatActivity {
         int minHeightDp = active ? 126 : 100;
         BoundedMaterialCardView shell = new BoundedMaterialCardView(this);
         shell.setMinimumHeight(dp(minHeightDp));
-        // 仅进行中卡片锁定最大高度（稳定倒计时/进度动画）；
+        // 所有状态均按内容自适应，避免动态字体裁切；
         // 普通与灰化卡片高度随内容自适应，两行课程名 + 时间胶囊 + 信息行不再被裁切，
         // 系统大字号、竖屏窄屏同样安全。
         shell.setMaxHeightPx(0);
@@ -2485,12 +2521,12 @@ public class MainActivity extends AppCompatActivity {
         edit.setPadding(dp(8), dp(8), dp(8), dp(8));
         edit.setContentDescription("\u7f16\u8f91\u8bfe\u7a0b");
         edit.setOnClickListener(view -> showCourseDialog(course));
-        LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(dp(44), dp(44));
+        LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP));
         // 水平 LinearLayout 中 layout_gravity 控制纵向位置：贴顶对齐，和示意图一致
         editParams.gravity = Gravity.TOP;
-        FrameLayout.LayoutParams overlayEditParams = new FrameLayout.LayoutParams(dp(44), dp(44), Gravity.TOP | Gravity.END);
+        FrameLayout.LayoutParams overlayEditParams = new FrameLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP), Gravity.TOP | Gravity.END);
         overlayEditParams.setMargins(0, dp(4), dp(4), 0);
-        shell.addView(touchContainer(edit, 36), overlayEditParams);
+        shell.addView(touchContainer(edit, MORE_VISUAL_DP), overlayEditParams);
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -3470,11 +3506,11 @@ public class MainActivity extends AppCompatActivity {
             swatch.setGravity(Gravity.CENTER);
             swatch.setBackground(swatchStateListBackground(color, isSelected));
             swatch.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            cell.addView(swatch, new LinearLayout.LayoutParams(dp(44), dp(44)));
+            cell.addView(swatch, new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP)));
 
             TextView name = new TextView(this);
             name.setText(ACCENT_PRESET_NAMES[index]);
-            name.setTextSize(11);
+            name.setTextSize(AUX_TEXT_SP);
             name.setTextColor(isSelected ? accentColor() : secondaryTextColor());
             name.setTypeface(appTypeface(isSelected ? Typeface.BOLD : Typeface.NORMAL));
             name.setGravity(Gravity.CENTER);
@@ -4953,9 +4989,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String displayedWeekRangeLabel(int week) {
+        long first = Long.MAX_VALUE, last = Long.MIN_VALUE;
+        for (int day = 0; day < DAYS.length; day++) {
+            long date = displayedDateMillis(week, day);
+            first = Math.min(first, date); last = Math.max(last, date);
+        }
         SimpleDateFormat format = new SimpleDateFormat("M.d", Locale.CHINA);
-        return format.format(new java.util.Date(displayedDateMillis(week, 0)))
-                + "–" + format.format(new java.util.Date(displayedDateMillis(week, 6)));
+        return format.format(new java.util.Date(first)) + "–" + format.format(new java.util.Date(last));
     }
 
     private long courseDateMillisForWeek(int schoolDay, int teachingWeek) {

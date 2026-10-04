@@ -431,7 +431,12 @@ public final class DeviceValidationRunner extends Instrumentation {
                 check(Float.isFinite(positions[index]), "Invalid timeline coordinate");
                 if (index == 0) check(Math.abs(positions[index] - (float) call("timelineAnchorTop", 0)) < 1, "Before-class clamp wrong");
                 if (index == 4) check(Math.abs(positions[index] - (float) call("timelineAnchorBottom", 2)) < 1, "After-class clamp wrong");
-                if (index > 0) check(positions[index] > positions[index - 1], "Clock did not move forward through rows/gap");
+                if (index == 1 || index == 3) {
+                    int row = index == 1 ? 0 : 2;
+                    float top = (float) call("timelineAnchorTop", row), bottom = (float) call("timelineAnchorBottom", row);
+                    float expected = top + (index == 1 ? 0.6f : 0.5f) * (bottom - top);
+                    check(Math.abs(positions[index] - expected) < 1, "Course progress does not match measured interval");
+                }
                 if (index == 2) check(positions[index] > (float) call("timelineAnchorBottom", 1)
                         && positions[index] < (float) call("timelineAnchorTop", 2), "Break line outside adjacent anchors");
             }));
