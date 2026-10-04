@@ -36,6 +36,7 @@ final class R {
         static final int hero_scene = 32;
         static final int ic_file_import = 33;
         static final int ic_bell_status = 34;
+        static final int hero_window_refresh = 35;
     }
 
     static final class string {

@@ -784,7 +784,7 @@ public class MainActivity extends AppCompatActivity {
         // 整张 Hero 图：窗 + 天空 + 云 + 白花 + 人物都在同一张画里，光照统一，不需要再分层。
         // 素材落库前已做四边羽化 + 底边大幅渐隐，所以直接铺满顶部，无需再叠天空渐变。
         android.widget.ImageView scene = new android.widget.ImageView(this);
-        scene.setImageResource(R.drawable.hero_scene);
+        scene.setImageResource(R.drawable.hero_window_refresh);
         scene.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
         scene.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
 
