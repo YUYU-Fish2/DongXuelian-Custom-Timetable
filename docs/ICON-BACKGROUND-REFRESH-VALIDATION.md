@@ -3,7 +3,7 @@
 User plan: ICON-BACKGROUND-REFRESH-PLAN.md. Continue ui/v2-refresh from 448337c. Prior user authorization delegates screenshot acceptance to the agent; each RB stage is inspected against the supplied reference before the next stage. No additional user visual approval required.
 
 - RB1 accepted: new window/lake/white flowers/books Hero, original character retained. Fixed scene screenshot inspected: both eyes visible, date heading/range retained. Isolated build and device layout/touch audit passed; host 21 cases and Android Java compile passed.
-- RB2 pending: cohesive flowers/books card assets.
+- RB2 accepted: transparent mint/peach/lavender flowers and books selected by existing card color. Fixed fixture screenshot inspected; isolated build/device layout audit and host 21 cases passed. Final alpha tuning remains RB7.
 - RB3 pending: clock/location/person/calendar vectors.
 - RB4 pending: more/chevron/tune/plus/sparkle vectors.
 - RB5 pending: settings icons and separate notification/reminder semantics.

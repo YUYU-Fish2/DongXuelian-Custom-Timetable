@@ -37,6 +37,9 @@ final class R {
         static final int ic_file_import = 33;
         static final int ic_bell_status = 34;
         static final int hero_window_refresh = 35;
+        static final int art_flower_mint = 36;
+        static final int art_flower_lavender = 37;
+        static final int art_flower_peach = 38;
     }
 
     static final class string {

@@ -2058,54 +2058,15 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * 课程卡片右下角装饰插画：按课程名关键词匹配主题小物件。
-     *
-     * 归类顺序有意固定：外语 → 程序/数据 → 计算机硬件 → 数理，避免"计算机组成原理"
-     * 被更宽泛的规则先截走。全部不命中时按课程名哈希稳定选取，保证同一门课每次渲染一致。
-     */
+    /** Match decorative flowers/books to the existing card color without changing stored colors. */
     private int courseArtResId(Course course) {
-        String name = course.name == null
-                ? ""
-                : course.name.toLowerCase(java.util.Locale.ROOT);
-
-        if (containsAny(name, "英语", "english", "日语", "德语", "法语", "俄语", "外语",
-                "口语", "听力", "翻译", "写作")) {
-            return R.drawable.art_english;
+        int red = Color.red(course.color);
+        int green = Color.green(course.color);
+        int blue = Color.blue(course.color);
+        if (red > green) {
+            return blue > green ? R.drawable.art_flower_lavender : R.drawable.art_flower_peach;
         }
-        if (containsAny(name, "数据结构", "算法", "编程", "程序", "代码", "软件", "数据库",
-                "操作系统", "编译", "语言", "人工智能", "机器学习")) {
-            return R.drawable.art_data;
-        }
-        if (containsAny(name, "计算机", "组成", "计组", "芯片", "硬件", "电路", "数字逻辑",
-                "微机", "嵌入式", "网络", "通信", "电子")) {
-            return R.drawable.art_computer;
-        }
-        if (containsAny(name, "数学", "高数", "代数", "几何", "微积分", "统计", "概率",
-                "线性", "离散", "物理", "化学", "力学", "分析", "数值")) {
-            return R.drawable.art_math;
-        }
-
-        int[] pool = {
-                R.drawable.art_math,
-                R.drawable.art_data,
-                R.drawable.art_computer,
-                R.drawable.art_english
-        };
-        int hash = 0;
-        for (int i = 0; i < name.length(); i++) {
-            hash = hash * 31 + name.charAt(i);
-        }
-        return pool[Math.abs(hash % pool.length)];
-    }
-
-    private boolean containsAny(String text, String... keys) {
-        for (String key : keys) {
-            if (text.contains(key)) {
-                return true;
-            }
-        }
-        return false;
+        return R.drawable.art_flower_mint;
     }
 
     /**
