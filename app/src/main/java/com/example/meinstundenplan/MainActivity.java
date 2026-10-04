@@ -108,12 +108,29 @@ public class MainActivity extends AppCompatActivity {
     private static final int CONTENT_SIDE_MARGIN_DP = 28;
     // Hero 区角色插画。置 false 即回到"无人物版"：去掉人物后版式依然完整可编译。
     private static final boolean SHOW_HERO_CHARACTER = true;
-    // Hero 高度硬上限：不超过屏高的 22%，避免压缩课表可视空间。
-    private static final int HERO_CHARACTER_MAX_HEIGHT_DP = 174;
-    // 课程卡片右下角小插画的透明度。
-    // 按反馈"要像 Hero 一样凸显"，已提到接近满不透明；素材端也把饱和/对比拉了一档。
-    // 插画绘制在文字下层，且位于右下角，长文本省略时也不会盖住可读内容。
-    private static final float COURSE_ART_ALPHA = 0.95f;
+    // Hero 高度硬上限：不超过屏高的 19%，避免压缩课表可视空间。
+    private static final int HERO_CHARACTER_MAX_HEIGHT_DP = 150;
+    private static final float HERO_TARGET_HEIGHT_RATIO = 0.19f;
+    // Initial visual scale; validate cropping within the approved 1.18–1.26 range.
+    private static final float HERO_SCENE_SCALE = 1.22f;
+    // Flowers/books remain subordinate to course text; completed art is quieter.
+    // UI v2 shared tokens; dimensions in dp, text in sp.
+    private static final int TOUCH_TARGET_DP = 44;
+    private static final int SETTINGS_VISUAL_DP = 38;
+    private static final int ADD_VISUAL_DP = 42;
+    private static final int MORE_VISUAL_DP = 36;
+    private static final int META_ICON_DP = 14;
+    private static final int HEADER_ICON_DP = 20;
+    private static final int HEADER_TEXT_SP = 18;
+    private static final int AUX_TEXT_SP = 11;
+    private static final int NEXT_NAME_SP = 20;
+    private static final float COUNTDOWN_NUMBER_SCALE = 2f;
+    private static final float NEXT_ART_ALPHA = 0.32f;
+    private static final float COURSE_ART_ALPHA_NORMAL = 0.58f;
+    private static final float COURSE_ART_ALPHA_COMPLETED = 0.40f;
+    // Instrumentation-only overrides; ignored outside the isolated debug validation package.
+    private long uiValidationNowMillis;
+    private float uiValidationArtAlpha = -1f;
 
     // ─────────────────────────────────────────────────────────────────────
     // 设计 token（brief §1 / §10）。统一收在这里，不要再往 buildLayout 里散写常量。
@@ -171,7 +188,7 @@ public class MainActivity extends AppCompatActivity {
      * 首行竖线要从这里起、末行竖线要在这里收，否则线会多出或缺少一截。
      * （时间和圆点同一行，所以只差半个行高。）
      */
-    private static final int TIMELINE_DOT_TOP_DP = 8;
+    private static final int TIMELINE_DOT_TOP_DP = 12;
     private static final int REQUEST_POST_NOTIFICATIONS = 61;
     private static final int LONG_CLASS_REMINDER_MINUTES = 30;
     private static final int SHORT_CLASS_REMINDER_MINUTES = 10;
@@ -235,6 +252,13 @@ public class MainActivity extends AppCompatActivity {
     private View daySelectionSlider;
     private LinearLayout dayTabs;
     private LinearLayout courseList;
+    private ScrollView pageScroll;
+    private FrameLayout timelineContainer;
+    private CurrentTimeOverlay currentTimeOverlay;
+    private final List<View> timelineRows = new ArrayList<>();
+    private final List<Course> timelineCourses = new ArrayList<>();
+    private float currentTimeY;
+
     private TextView summaryText;
     // 「下一节」胶囊（brief §7 三层）：容器 + 四段子视图
     private LinearLayout statusChip;
@@ -244,6 +268,12 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout statusChipMetaRow;
     private android.widget.ImageView statusChipMetaIcon;
     private TextView statusChipMeta;
+    private TextView statusChipCountdown;
+    private TextView statusChipDate;
+    private TextView statusChipRoom;
+    private TextView statusChipTeacher;
+    private TextView statusChipWeeks;
+    private LinearLayout statusChipDetails;
     private View settingsOverlay;
     private int selectedDay = 0;
     private int viewingWeek = 0; // 0=跟随真实当前周；非 0=预览该周
@@ -252,6 +282,8 @@ public class MainActivity extends AppCompatActivity {
     private ImageButton weekNextButton;
     private TextView weekLiveBadge;
     private LinearLayout weekNavRow;
+    private FrameLayout statusSurface;
+    private android.widget.ImageView statusArt;
     private AlertDialog weekPickerDialog;
     private HorizontalScrollView dayScroll;
     private int lastAutoScrolledDay = -1;
@@ -736,22 +768,16 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * Hero 氛围层：极淡的云 / 飘落花瓣 / 植物底图 + 角色背后的柔光晕（brief §3）。
-     *
-     * 底图**不做抠图**——云本身就是白的，与白底无法区分，键控会把云一起吃掉。
-     * 改为保留白底、整体压到 22%：白色叠在 #F5F8FD 页面上只差约 2/255（看不出边界），
-     * 而云和花瓣会作为很淡的纹理透出来。素材四周已做羽化，不会出现矩形硬边。
-     */
+    /** One feathered watercolor window scene with a clear date area and right-side character. */
     private void addHeroScene(FrameLayout safeFrame, boolean compact) {
         float density = getResources().getDisplayMetrics().density;
         int screenHeightDp = Math.round(getResources().getDisplayMetrics().heightPixels / density);
-        int heroHeightDp = Math.min(Math.round(screenHeightDp * 0.22f), HERO_CHARACTER_MAX_HEIGHT_DP);
+        int heroHeightDp = Math.min(Math.round(screenHeightDp * HERO_TARGET_HEIGHT_RATIO), HERO_CHARACTER_MAX_HEIGHT_DP);
 
         // 整张 Hero 图：窗 + 天空 + 云 + 白花 + 人物都在同一张画里，光照统一，不需要再分层。
         // 素材落库前已做四边羽化 + 底边大幅渐隐，所以直接铺满顶部，无需再叠天空渐变。
         android.widget.ImageView scene = new android.widget.ImageView(this);
-        scene.setImageResource(R.drawable.hero_scene);
+        scene.setImageResource(R.drawable.hero_window_refresh);
         scene.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
         scene.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
 
@@ -767,7 +793,7 @@ public class MainActivity extends AppCompatActivity {
         int bleedSidePx = dp(compact ? 12 : 20);
         FrameLayout.LayoutParams sceneParams = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(Math.round(heroHeightDp * 1.36f)) + bleedTopPx,
+                dp(Math.round(heroHeightDp * HERO_SCENE_SCALE)) + bleedTopPx,
                 Gravity.TOP);
         sceneParams.topMargin = -bleedTopPx;
         sceneParams.leftMargin = -bleedSidePx;
@@ -793,40 +819,24 @@ public class MainActivity extends AppCompatActivity {
         safeFrame.addView(glow, glowParams);
     }
 
-    /**
-     * 页面装饰（brief §8）：透明度 5%~20%，只贴边缘，不进入文字区，不做成满屏贴纸。
-     * 都加在滚动容器之前，所以课程卡片始终压在它们上面，装饰不会影响任何课程信息。
-     */
+    /** Pale watercolor atmosphere stays beneath content and at the bottom corners. */
     private void addPageDecorations(FrameLayout safeFrame) {
-        // 按反馈"下方左右两边用更大的图案、更融洽"：
-        // 参考图里底部两角是大簇白花+叶子，并且**被屏幕边缘裁切**（不是完整摆进去）。
-        // 所以这里放大到 90~150dp 并给出负 margin，让它们自然出血到画面之外，
-        // 体量感和参考图一致；safeFrame 的 setClipChildren(true) 会在屏幕边缘裁切。
-        addDecoration(safeFrame, R.drawable.deco_star,
-                Gravity.TOP | Gravity.START, 28, 104, 8, 0.64f);
-        // 左下角：雪莲花（主体，向左出血）
-        addDecoration(safeFrame, R.drawable.deco_petal,
-                Gravity.BOTTOM | Gravity.START, 124, 46, -20, 0.72f);
-        // 左下角：叶子（压在雪莲旁，向下出血）
-        addDecoration(safeFrame, R.drawable.deco_leaf,
-                Gravity.BOTTOM | Gravity.START, 96, -14, 60, 0.62f);
-        // 右下角：云（向右下出血）
-        addDecoration(safeFrame, R.drawable.deco_cloud,
-                Gravity.BOTTOM | Gravity.END, 152, -18, -28, 0.66f);
+        addDecoration(safeFrame, R.drawable.deco_flower_corner,
+                Gravity.BOTTOM | Gravity.START, 180, -20, -24, 0.36f);
+        addDecoration(safeFrame, R.drawable.deco_flower_corner,
+                Gravity.BOTTOM | Gravity.END, 148, -24, -22, 0.30f).setScaleX(-1f);
     }
 
     /** 放一个纯装饰小图。四个方向都设 margin，实际由 gravity 决定用哪几个。 */
-    private void addDecoration(FrameLayout parent, int resId, int gravity,
+    private android.widget.ImageView addDecoration(FrameLayout parent, int resId, int gravity,
                                int sizeDp, int verticalMarginDp, int horizontalMarginDp, float alpha) {
         android.widget.ImageView view = new android.widget.ImageView(this);
         view.setImageResource(resId);
         view.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         if (isDarkMode) {
-            // 装饰素材本身是极浅的蓝色线稿，压在近黑底上只剩一团没有颜色的灰斑，
-            // 看起来像脏点。深色模式下改用主色染色、并适度提高不透明度，
-            // 让它读起来是"有意的装饰"。
+            // Keep watercolor decoration quiet against a dark page.
             view.setImageTintList(ColorStateList.valueOf(accentColor()));
-            alpha = Math.min(0.55f, alpha * 2.2f);
+            alpha *= 0.65f;
         }
         view.setAlpha(alpha);
         view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -836,6 +846,7 @@ public class MainActivity extends AppCompatActivity {
         params.leftMargin = dp(horizontalMarginDp);
         params.rightMargin = dp(horizontalMarginDp);
         parent.addView(view, params);
+        return view;
     }
 
     private void buildLayout() {
@@ -863,6 +874,7 @@ public class MainActivity extends AppCompatActivity {
         addPageDecorations(safeFrame);
 
         ScrollView pageScroll = new ScrollView(this);
+        this.pageScroll = pageScroll;
         pageScroll.setFillViewport(true);
         pageScroll.setVerticalScrollBarEnabled(false);
         pageScroll.setClipChildren(true);
@@ -883,9 +895,7 @@ public class MainActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(compact ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
-        header.setGravity(compact ? Gravity.START : Gravity.CENTER_VERTICAL);
+        FrameLayout header = new FrameLayout(this);
         LinearLayout.LayoutParams headerParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -895,17 +905,17 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout titleBlock = new LinearLayout(this);
         titleBlock.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams titleBlockParams = compact
-                ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                : new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        header.addView(titleBlock, titleBlockParams);
+        header.addView(titleBlock, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START));
 
         summaryText = new TextView(this);
-        summaryText.setTextColor(secondaryTextColor());
-        summaryText.setTextSize(15);
-        summaryText.setTypeface(appTypeface(Typeface.NORMAL));
-        summaryText.setAlpha(0.85f);
-        summaryText.setSingleLine(true);
+        summaryText.setTextColor(primaryTextColor());
+        summaryText.setTextSize(HEADER_TEXT_SP);
+        summaryText.setTypeface(appTypeface(Typeface.BOLD));
+        summaryText.setAlpha(1f);
+        summaryText.setSingleLine(false);
+        summaryText.setMaxLines(2);
+        summaryText.setMaxWidth(dp(212));
         summaryText.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams summaryParams = new LinearLayout.LayoutParams(
                 compact ? ViewGroup.LayoutParams.MATCH_PARENT : ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -914,98 +924,78 @@ public class MainActivity extends AppCompatActivity {
         summaryParams.setMargins(0, dp(4), 0, 0);
         titleBlock.addView(summaryText, summaryParams);
 
-        // 「下一节」胶囊（brief §7 三层）：图标 + 标签 / 课程名 / 时间 · 教室。
-        // 视觉权重刻意低于上方标题；compact 下右侧留出角色宽度，避免压到人物。
+        // P2: full-width information card below the Hero, with stable rows in every state.
+        header.setMinimumHeight(dp(110));
         statusChip = new LinearLayout(this);
         statusChip.setOrientation(LinearLayout.VERTICAL);
-        statusChip.setPadding(dp(14), dp(10), dp(16), dp(11));
-
-        LinearLayout chipLabelRow = new LinearLayout(this);
-        chipLabelRow.setOrientation(LinearLayout.HORIZONTAL);
-        chipLabelRow.setGravity(Gravity.CENTER_VERTICAL);
-
+        statusChip.setPadding(dp(14), dp(12), dp(14), dp(12));
+        LinearLayout labelRow = new LinearLayout(this);
+        labelRow.setGravity(Gravity.CENTER_VERTICAL);
         statusChipIcon = new android.widget.ImageView(this);
         statusChipIcon.setImageResource(R.drawable.ic_sparkle);
-        statusChipIcon.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         statusChipIcon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LinearLayout.LayoutParams chipIconParams = new LinearLayout.LayoutParams(dp(13), dp(13));
-        chipIconParams.setMargins(0, 0, dp(6), 0);
-        chipLabelRow.addView(statusChipIcon, chipIconParams);
-
-        statusChipLabel = new TextView(this);
-        statusChipLabel.setTextSize(12);
-        statusChipLabel.setTypeface(appTypefaceMedium());
-        statusChipLabel.setIncludeFontPadding(false);
-        statusChipLabel.setSingleLine(true);
-        chipLabelRow.addView(statusChipLabel);
-
-        // 效果图第一行是「图标 下一节 …… 14:30 - 16:10 ›」：
-        // 用一条 weight 撑开中间，把时间和右箭头推到行尾，而不是像原来那样各占一行。
-        View chipSpacer = new View(this);
-        chipLabelRow.addView(chipSpacer, new LinearLayout.LayoutParams(0, 1, 1f));
-
-        statusChipMetaRow = new LinearLayout(this);
-        statusChipMetaRow.setOrientation(LinearLayout.HORIZONTAL);
-        statusChipMetaRow.setGravity(Gravity.CENTER_VERTICAL);
-
-        statusChipMetaIcon = new android.widget.ImageView(this);
-        statusChipMetaIcon.setImageResource(R.drawable.ic_clock_outline);
-        statusChipMetaIcon.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
-        statusChipMetaIcon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LinearLayout.LayoutParams chipMetaIconParams = new LinearLayout.LayoutParams(dp(12), dp(12));
-        chipMetaIconParams.setMargins(0, 0, dp(4), 0);
-        statusChipMetaRow.addView(statusChipMetaIcon, chipMetaIconParams);
-
-        statusChipMeta = new TextView(this);
-        statusChipMeta.setTextSize(12);
-        statusChipMeta.setTypeface(appTypefaceMedium());
-        statusChipMeta.setIncludeFontPadding(false);
-        statusChipMeta.setSingleLine(true);
-        statusChipMeta.setEllipsize(TextUtils.TruncateAt.END);
-        statusChipMetaRow.addView(statusChipMeta);
-        chipLabelRow.addView(statusChipMetaRow);
-
-        android.widget.ImageView chipChevron = new android.widget.ImageView(this);
-        chipChevron.setImageResource(R.drawable.ic_pointer);
-        chipChevron.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
-        chipChevron.setImageTintList(ColorStateList.valueOf(secondaryTextColor()));
-        chipChevron.setAlpha(0.7f);
-        chipChevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LinearLayout.LayoutParams chipChevronParams = new LinearLayout.LayoutParams(dp(9), dp(9));
-        chipChevronParams.setMargins(dp(6), 0, 0, 0);
-        chipLabelRow.addView(chipChevron, chipChevronParams);
-
-        statusChip.addView(chipLabelRow);
-
-        statusChipName = new TextView(this);
-        statusChipName.setTextSize(compact ? 15 : 16);
-        statusChipName.setTypeface(appTypefaceSemiBold());
-        statusChipName.setIncludeFontPadding(false);
-        statusChipName.setSingleLine(true);
-        statusChipName.setEllipsize(TextUtils.TruncateAt.END);
-        LinearLayout.LayoutParams chipNameParams = new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams sparkleParams = new LinearLayout.LayoutParams(dp(14), dp(14));
+        sparkleParams.rightMargin = dp(6);
+        labelRow.addView(statusChipIcon, sparkleParams);
+        statusChipLabel = statusChipText(12, false);
+        labelRow.addView(statusChipLabel, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        statusChipCountdown = statusChipText(12, false);
+        LinearLayout.LayoutParams countdownParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        countdownParams.leftMargin = dp(8);
+        labelRow.addView(statusChipCountdown, countdownParams);
+        android.widget.ImageView chevron = new android.widget.ImageView(this);
+        chevron.setImageResource(R.drawable.ic_chevron_right);
+        chevron.setImageTintList(ColorStateList.valueOf(secondaryTextColor()));
+        chevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams chevronParams = new LinearLayout.LayoutParams(dp(16), dp(16));
+        chevronParams.leftMargin = dp(4);
+        labelRow.addView(chevron, chevronParams);
+        statusChip.addView(labelRow);
+        statusChipDate = statusChipText(12, false);
+        LinearLayout.LayoutParams dateParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        chipNameParams.setMargins(0, dp(5), 0, 0);
-        statusChip.addView(statusChipName, chipNameParams);
-
-        int chipRightReserve = SHOW_HERO_CHARACTER && compact
-                ? Math.max(0, heroReservedWidthDp(true) - sideMargin) : 0;
-        LinearLayout.LayoutParams chipParams = new LinearLayout.LayoutParams(
-                compact ? ViewGroup.LayoutParams.MATCH_PARENT : ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        chipParams.setMargins(0, dp(10), dp(chipRightReserve), 0);
-        titleBlock.addView(statusChip, chipParams);
+        dateParams.topMargin = dp(6);
+        statusChip.addView(statusChipDate, dateParams);
+        statusChipName = statusChipText(NEXT_NAME_SP, true);
+        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        nameParams.topMargin = dp(7);
+        statusChip.addView(statusChipName, nameParams);
+        statusChipDetails = new LinearLayout(this);
+        statusChipDetails.setOrientation(LinearLayout.VERTICAL);
+        statusChipMetaRow = new LinearLayout(this);
+        statusChipMetaRow.setGravity(Gravity.CENTER_VERTICAL);
+        statusChipMeta = statusChipText(12, false);
+        statusChipRoom = statusChipText(12, false);
+        statusChipMetaRow.addView(statusChipDetail(R.drawable.ic_clock_outline, statusChipMeta),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.15f));
+        statusChipMetaRow.addView(statusChipDetail(R.drawable.ic_location, statusChipRoom),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        statusChipDetails.addView(statusChipMetaRow);
+        LinearLayout secondaryRow = new LinearLayout(this);
+        secondaryRow.setGravity(Gravity.CENTER_VERTICAL);
+        statusChipTeacher = statusChipText(11, false);
+        statusChipWeeks = statusChipText(11, false);
+        secondaryRow.addView(statusChipDetail(R.drawable.ic_person, statusChipTeacher),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.85f));
+        secondaryRow.addView(statusChipDetail(R.drawable.ic_calendar_outline, statusChipWeeks),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.3f));
+        LinearLayout.LayoutParams secondaryParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        secondaryParams.topMargin = dp(6);
+        statusChipDetails.addView(secondaryRow, secondaryParams);
+        LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        detailParams.topMargin = dp(7);
+        statusChip.addView(statusChipDetails, detailParams);
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setGravity(compact ? Gravity.END | Gravity.CENTER_VERTICAL : Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams actionsParams = compact
-                ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        if (compact) {
-            actionsParams.setMargins(0, dp(12), 0, 0);
-        }
+        FrameLayout.LayoutParams actionsParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END | Gravity.BOTTOM);
+        actionsParams.bottomMargin = dp(4);
         header.addView(actions, actionsParams);
 
         // 主题切换按钮已移除：按用户指示去掉暗模式、只保留亮模式后，
@@ -1013,27 +1003,41 @@ public class MainActivity extends AppCompatActivity {
         ImageButton settingsButton = new ImageButton(this);
         settingsButton.setImageResource(R.drawable.ic_settings_outline);
         settingsButton.setImageTintList(ColorStateList.valueOf(accentColor()));
-        settingsButton.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+        settingsButton.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         settingsButton.setContentDescription("\u8bbe\u7f6e");
         settingsButton.setBackground(elevatedCardBackground(cardColor(), dp(ACTION_BUTTON_SIZE_DP / 2)));
         settingsButton.setElevation(dp(ELEVATION_SOFT));
-        settingsButton.setPadding(dp(11), dp(11), dp(11), dp(11));
+        int settingsIconPadding = dp((SETTINGS_VISUAL_DP - HEADER_ICON_DP) / 2);
+        settingsButton.setPadding(settingsIconPadding, settingsIconPadding, settingsIconPadding, settingsIconPadding);
         settingsButton.setOnClickListener(view -> showSettingsDialogV2());
-        LinearLayout.LayoutParams settingsParams = new LinearLayout.LayoutParams(dp(actionButtonSize), dp(actionButtonSize));
+        LinearLayout.LayoutParams settingsParams = new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP));
         settingsParams.setMargins(0, 0, dp(10), 0);
-        actions.addView(settingsButton, settingsParams);
+        actions.addView(touchContainer(settingsButton, SETTINGS_VISUAL_DP), settingsParams);
 
         ImageButton addButton = new ImageButton(this);
         addButton.setImageResource(R.drawable.ic_plus);
         addButton.setImageTintList(ColorStateList.valueOf(Color.WHITE));
-        addButton.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+        addButton.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         addButton.setContentDescription("\u6dfb\u52a0\u8bfe\u7a0b");
         // 「＋」保持主色实心（示意图里它是唯一的实心钮，承担"主操作"）
         addButton.setBackground(interactiveButtonBackground(accentColor(), dp(ACTION_BUTTON_SIZE_DP / 2)));
         addButton.setElevation(dp(ELEVATION_SOFT));
         addButton.setPadding(dp(11), dp(11), dp(11), dp(11));
         addButton.setOnClickListener(view -> showCourseDialog(null));
-        actions.addView(addButton, new LinearLayout.LayoutParams(dp(actionButtonSize), dp(actionButtonSize)));
+        actions.addView(touchContainer(addButton, ADD_VISUAL_DP), new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP)));
+
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        statusParams.setMargins(dp(sideMargin), dp(8), dp(sideMargin), 0);
+        statusSurface = new FrameLayout(this);
+        statusArt = new android.widget.ImageView(this);
+        statusArt.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        statusArt.setAlpha(NEXT_ART_ALPHA);
+        statusArt.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        FrameLayout.LayoutParams statusArtParams = new FrameLayout.LayoutParams(dp(116), dp(100), Gravity.END | Gravity.BOTTOM);
+        statusSurface.addView(statusArt, statusArtParams);
+        statusSurface.addView(statusChip, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(statusSurface, statusParams);
 
         // 周切换导航条：‹ 第N周·日期范围 › [回到本周]
         weekNavRow = new LinearLayout(this);
@@ -1043,34 +1047,36 @@ public class MainActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
-        weekNavParams.setMargins(dp(sideMargin), dp(compact ? 14 : 18), dp(sideMargin), dp(6));
-        root.addView(weekNavRow, weekNavParams);
+        weekNavParams.width = dp(184);
+        weekNavParams.setMargins(0, dp(2), 0, 0);
+        titleBlock.addView(weekNavRow, weekNavParams);
 
         weekPrevButton = new ImageButton(this);
         weekPrevButton.setImageResource(R.drawable.ic_chevron_right);
         weekPrevButton.setRotation(180f);
         weekPrevButton.setImageTintList(ColorStateList.valueOf(accentColor()));
-        weekPrevButton.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+        weekPrevButton.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         weekPrevButton.setContentDescription("上一周");
         // brief §5：箭头做成"白底 + 细描边 + 轻阴影"的小圆角块
         weekPrevButton.setBackground(elevatedCardBackground(cardColor(), dp(14)));
         weekPrevButton.setElevation(dp(ELEVATION_SOFT));
-        weekPrevButton.setPadding(dp(9), dp(9), dp(9), dp(9));
-        weekPrevButton.setOnClickListener(view -> stepViewingWeek(-1));
-        LinearLayout.LayoutParams weekPrevParams = new LinearLayout.LayoutParams(dp(36), dp(36));
+        weekPrevButton.setPadding(dp(8), dp(8), dp(8), dp(8));
+        weekPrevButton.setOnClickListener(view -> { if (weekPickerDialog != null) weekPickerDialog.dismiss(); stepViewingWeek(-1); });
+        LinearLayout.LayoutParams weekPrevParams = new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP));
         weekPrevParams.setMargins(0, 0, dp(4), 0);
-        weekNavRow.addView(weekPrevButton, weekPrevParams);
+        touchContainer(weekPrevButton, 32);
 
         weekRangeText = new TextView(this);
-        weekRangeText.setTextSize(compact ? 13 : 14);
-        weekRangeText.setTypeface(appTypeface(Typeface.BOLD));
+        weekRangeText.setTextSize(AUX_TEXT_SP);
+        weekRangeText.setTypeface(appTypeface(Typeface.NORMAL));
         weekRangeText.setTextColor(primaryTextColor());
-        weekRangeText.setGravity(Gravity.CENTER);
+        weekRangeText.setGravity(Gravity.START | Gravity.TOP);
         weekRangeText.setSingleLine(true);
         weekRangeText.setEllipsize(TextUtils.TruncateAt.END);
         weekRangeText.setIncludeFontPadding(false);
-        weekRangeText.setPadding(dp(8), dp(9), dp(8), dp(9));
-        weekRangeText.setBackground(interactiveSurfaceBackground(tonalContainerColor(), dp(14)));
+        weekRangeText.setPadding(0, 0, 0, 0);
+        weekRangeText.setMinimumHeight(dp(TOUCH_TARGET_DP));
+        weekRangeText.setBackground(null);
         weekRangeText.setContentDescription("选择周次");
         weekRangeText.setOnClickListener(view -> showWeekPickerDialog());
         weekNavRow.addView(weekRangeText, new LinearLayout.LayoutParams(
@@ -1080,15 +1086,15 @@ public class MainActivity extends AppCompatActivity {
         weekNextButton = new ImageButton(this);
         weekNextButton.setImageResource(R.drawable.ic_chevron_right);
         weekNextButton.setImageTintList(ColorStateList.valueOf(accentColor()));
-        weekNextButton.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+        weekNextButton.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         weekNextButton.setContentDescription("下一周");
         weekNextButton.setBackground(elevatedCardBackground(cardColor(), dp(14)));
         weekNextButton.setElevation(dp(ELEVATION_SOFT));
-        weekNextButton.setPadding(dp(9), dp(9), dp(9), dp(9));
-        weekNextButton.setOnClickListener(view -> stepViewingWeek(1));
-        LinearLayout.LayoutParams weekNextParams = new LinearLayout.LayoutParams(dp(36), dp(36));
+        weekNextButton.setPadding(dp(8), dp(8), dp(8), dp(8));
+        weekNextButton.setOnClickListener(view -> { if (weekPickerDialog != null) weekPickerDialog.dismiss(); stepViewingWeek(1); });
+        LinearLayout.LayoutParams weekNextParams = new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP));
         weekNextParams.setMargins(dp(4), 0, dp(4), 0);
-        weekNavRow.addView(weekNextButton, weekNextParams);
+        touchContainer(weekNextButton, 32);
 
         weekLiveBadge = new TextView(this);
         weekLiveBadge.setText("本周");
@@ -1098,14 +1104,14 @@ public class MainActivity extends AppCompatActivity {
         weekLiveBadge.setGravity(Gravity.CENTER);
         weekLiveBadge.setIncludeFontPadding(false);
         weekLiveBadge.setContentDescription("返回本周");
-        weekLiveBadge.setPadding(dp(11), dp(9), dp(11), dp(9));
+        weekLiveBadge.setPadding(dp(6), dp(4), dp(6), dp(4));
+        weekLiveBadge.setMinimumHeight(dp(TOUCH_TARGET_DP));
         weekLiveBadge.setBackground(interactiveTranslucentBackground(
                 withAlpha(accentColor(), isDarkMode ? 64 : 34), dp(14)));
         weekLiveBadge.setOnClickListener(view -> returnToCurrentWeek());
         weekLiveBadge.setVisibility(View.GONE);
         weekNavRow.addView(weekLiveBadge, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ));
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(TOUCH_TARGET_DP)));
 
         HorizontalScrollView dayScroll = new HorizontalScrollView(this);
         this.dayScroll = dayScroll;
@@ -1114,7 +1120,7 @@ public class MainActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
-        dayScrollParams.setMargins(dp(sideMargin), dp(compact ? 8 : 10), dp(sideMargin), dp(16));
+        dayScrollParams.setMargins(dp(sideMargin), dp(compact ? 8 : 10), dp(sideMargin), dp(8));
         root.addView(dayScroll, dayScrollParams);
 
         dayTabFrame = new FrameLayout(this);
@@ -1138,8 +1144,13 @@ public class MainActivity extends AppCompatActivity {
         courseList.setOrientation(LinearLayout.VERTICAL);
         courseList.setClipChildren(false);
         courseList.setClipToPadding(false);
-        courseList.setPadding(0, dp(12), 0, dp(18));
-        root.addView(courseList, new LinearLayout.LayoutParams(
+        courseList.setPadding(0, dp(4), 0, dp(18));
+        timelineContainer = new FrameLayout(this);
+        timelineContainer.addView(courseList, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        currentTimeOverlay = new CurrentTimeOverlay();
+        timelineContainer.addView(currentTimeOverlay, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        timelineContainer.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> updateCurrentTimeLine());
+        root.addView(timelineContainer, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
@@ -1151,37 +1162,27 @@ public class MainActivity extends AppCompatActivity {
         renderDayTabs();
         renderCourseList();
         renderWeekNav();
-        int count = 0;
-        int filterWeek = viewingWeek != 0 ? viewingWeek : currentTeachingWeek();
-        int today = currentSchoolDay();
-        for (Course course : courses) {
-            if (viewingWeek != 0 && course.temporary) {
-                continue;
-            }
-            if (course.day == selectedDay && courseOccursInTeachingWeek(course, filterWeek)) {
-                count++;
-            }
-        }
         Course currentCourse = viewingWeek == 0 ? currentCourseInProgress() : null;
         SummaryCourse nextCourse = currentCourse == null && viewingWeek == 0
                 ? nextUpcomingCourseFromToday() : null;
         int realWeek = currentTeachingWeek();
         String weekText;
         if (viewingWeek != 0) {
-            weekText = "第" + viewingWeek + "周 · ";
+            weekText = "第" + viewingWeek + "周";
         } else if (realWeek >= 1 && realWeek <= calendarTotalWeeks()) {
-            weekText = "第" + realWeek + "周 · ";
+            weekText = "第" + realWeek + "周";
         } else if (startOfTodayMillis() < calendarStartMillis()) {
-            weekText = "未开学 · ";
+            weekText = "未开学";
         } else {
-            weekText = "假期 · ";
+            weekText = "假期";
         }
         summaryText.setText(String.format(
                 Locale.CHINA,
-                "%s%s · %d 门课",
+                "%s · %s · %s",
                 weekText,
                 DAYS[selectedDay],
-                count
+                new SimpleDateFormat("M月d日", Locale.CHINA).format(new java.util.Date(
+                        displayedDateMillis(displayedViewingWeek(), selectedDay)))
         ));
         if (viewingWeek != 0) {
             updateStatusChip(null, null, true);
@@ -1191,73 +1192,130 @@ public class MainActivity extends AppCompatActivity {
         renderedTemporalSignature = temporalSignature();
     }
 
-    /**
-     * 「下一节」胶囊：三态（正在上课 / 下一节 / 暂无后续课程）+ 预览态。
-     *
-     * 四态共用同一版式，只换文案与配色浓淡，保证看起来始终是同一个组件。
-     * 数据完全来自 currentCourseInProgress() / nextUpcomingCourseFromToday()，不新增业务逻辑。
-     */
-    private void updateStatusChip(Course current, SummaryCourse next, boolean previewMode) {
-        if (statusChip == null) {
-            return;
-        }
-        Course shown = current != null ? current : (next != null ? next.course : null);
-        boolean ongoing = current != null;
-        boolean hasCourse = shown != null;
+    /** Separate visual size from the actual, accessible touch target. */
+    private FrameLayout touchContainer(ImageButton button, int visualSizeDp) {
+        FrameLayout target = new FrameLayout(this);
+        target.setMinimumWidth(dp(TOUCH_TARGET_DP)); target.setMinimumHeight(dp(TOUCH_TARGET_DP));
+        target.setContentDescription(button.getContentDescription());
+        target.setFocusable(true);
+        target.setOnClickListener(view -> { if (button.isEnabled()) button.performClick(); });
+        button.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        button.setFocusable(false);
+        target.addView(button, new FrameLayout.LayoutParams(dp(visualSizeDp), dp(visualSizeDp), Gravity.CENTER));
+        return target;
+    }
 
+    private TextView statusChipText(int size, boolean prominent) {
+        TextView text = new TextView(this);
+        text.setTextSize(size);
+        text.setTypeface(prominent ? appTypefaceSemiBold() : appTypefaceMedium());
+        text.setIncludeFontPadding(false);
+        text.setSingleLine(true);
+        text.setEllipsize(TextUtils.TruncateAt.END);
+        return text;
+    }
+
+    private LinearLayout statusChipDetail(int resource, TextView text) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, 0, dp(6), 0);
+        android.widget.ImageView icon = new android.widget.ImageView(this);
+        icon.setImageResource(resource);
+        icon.setImageTintList(ColorStateList.valueOf(metaIconColor(secondaryTextColor())));
+        icon.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(META_ICON_DP), dp(META_ICON_DP));
+        iconParams.rightMargin = dp(5);
+        row.addView(icon, iconParams);
+        row.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        return row;
+    }
+
+    /** Presentation only: existing course lookup and date rules remain authoritative. */
+    private void updateStatusChip(Course current, SummaryCourse next, boolean previewMode) {
+        if (statusChip == null) return;
+        long today = startOfTodayMillis();
+        boolean beforeSemester = today < calendarStartMillis();
+        boolean afterSemester = today > startOfDayMillis(calendarEndMillis());
+        Course shown = current != null ? current : (next != null ? next.course : null);
+        boolean ongoing = !previewMode && !beforeSemester && !afterSemester && current != null;
+        boolean nextToday = next != null && startOfDayMillis(next.startAtMillis) == today;
         String label;
+        String countdown = "";
         if (previewMode) {
-            label = "预览模式";
+            label = "预览第 " + viewingWeek + " 周";
+            shown = null;
+        } else if (beforeSemester) {
+            label = "未开学";
+            shown = next != null ? next.course : null;
+        } else if (afterSemester) {
+            label = "本学期已结束";
+            shown = null;
         } else if (ongoing) {
             label = "正在上课";
-        } else if (hasCourse) {
-            // 不是今天的课就把星期带在标签上，否则只看时间会误以为是今天
-            label = next != null && next.day != currentSchoolDay()
-                    ? "下一节 · " + DAYS[next.day]
-                    : "下一节";
+            int minutes = Math.max(0, (courseEndSeconds(current) - currentSeconds() + 59) / 60);
+            countdown = "剩余 " + minutes + " min";
+        } else if (nextToday) {
+            label = "下一节";
+            long minutes = Math.max(1, (next.startAtMillis - uiNowMillis() + 59999) / 60000);
+            countdown = minutes + " min 后";
         } else {
-            label = "暂无后续课程";
+            boolean hadToday = false;
+            boolean allEnded = true;
+            for (Course course : courses) {
+                if (course.day == currentSchoolDay()
+                        && courseTemporalState(course) != TimetableRules.TemporalState.UNAVAILABLE) {
+                    hadToday = true;
+                    if (courseTemporalState(course) != TimetableRules.TemporalState.COMPLETED) allEnded = false;
+                }
+            }
+            if (hadToday && allEnded) label = "今日课程已结束";
+            else if (next != null) label = "下一节 · " + DAYS[next.day];
+            else label = "暂无后续课程";
         }
+        boolean detail = shown != null;
         statusChipLabel.setText(label);
-
-        boolean showDetail = hasCourse && !previewMode;
-        if (showDetail) {
-            statusChipName.setText(shown.name);
-            // 效果图第一行是「下一节 …… 14:30 - 16:10 ›」：只放时间范围。
-            // 原来还塞了教室，结果这一行被截成「当前:...」，箭头也被挤没了。
-            statusChipMeta.setText(periodRangeTime(shown));
-            statusChipName.setVisibility(View.VISIBLE);
-            statusChipMetaRow.setVisibility(View.VISIBLE);
-        } else {
-            statusChipName.setVisibility(View.GONE);
-            statusChipMetaRow.setVisibility(View.GONE);
+        android.text.SpannableString emphasizedCountdown = new android.text.SpannableString(countdown);
+        java.util.regex.Matcher digits = java.util.regex.Pattern.compile("[0-9]+").matcher(countdown);
+        if (digits.find()) {
+            emphasizedCountdown.setSpan(new android.text.style.RelativeSizeSpan(COUNTDOWN_NUMBER_SCALE), digits.start(), digits.end(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            emphasizedCountdown.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), digits.start(), digits.end(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
-
-        // 配色：预览/正在上课最重，普通「下一节」更淡，「暂无」整体弱化成灰
-        int tint;
-        float amount;
-        if (previewMode || ongoing) {
-            tint = accentColor();
-            amount = isDarkMode ? 0.30f : 0.13f;
-        } else if (hasCourse) {
-            tint = accentColor();
-            amount = isDarkMode ? 0.20f : 0.06f;
-        } else {
-            tint = secondaryTextColor();
-            amount = isDarkMode ? 0.16f : 0.05f;
-        }
-        statusChip.setBackground(verticalGradientBackground(
+        statusChipCountdown.setText(emphasizedCountdown);
+        statusChipCountdown.setVisibility(countdown.isEmpty() ? View.GONE : View.VISIBLE);
+        boolean futureDate = detail && !ongoing && next != null && !nextToday;
+        statusChipDate.setText(futureDate ? (beforeSemester ? "首课 · " : "下一节 · ")
+                + formatDate(next.startAtMillis) + " · " + DAYS[next.day] : "");
+        statusChipDate.setVisibility(futureDate ? View.VISIBLE : View.GONE);
+        statusChipName.setText(detail ? shown.name : "");
+        statusChipMeta.setText(detail ? periodRangeTime(shown) : "");
+        statusChipRoom.setText(detail ? (TextUtils.isEmpty(shown.room) ? "地点未填" : shown.room) : "");
+        statusChipTeacher.setText(detail ? (TextUtils.isEmpty(shown.teacher) ? "教师未填" : shown.teacher) : "");
+        String weekDetail = detail ? shown.weeks + " · " + shown.periodLabel() : "";
+        statusChipWeeks.setText(weekDetail);
+        statusChipName.setVisibility(detail ? View.VISIBLE : View.GONE);
+        statusChipDetails.setVisibility(detail ? View.VISIBLE : View.GONE);
+        statusChipMetaRow.setVisibility(detail ? View.VISIBLE : View.GONE);
+        int tint = ongoing || detail || previewMode ? accentColor() : secondaryTextColor();
+        float amount = ongoing || previewMode ? 0.10f : 0.04f;
+        statusSurface.setBackground(verticalGradientBackground(
                 mixColor(cardColor(), tint, amount),
-                mixColor(cardColor(), tint, Math.min(0.9f, amount * 2.4f)),
-                dp(18)));
-
-        int labelColor = hasCourse ? accentColor() : secondaryTextColor();
-        statusChipLabel.setTextColor(labelColor);
-        statusChipIcon.setImageTintList(ColorStateList.valueOf(labelColor));
-        statusChipName.setTextColor(ongoing ? accentColor() : primaryTextColor());
-        int metaColor = ongoing ? accentColor() : secondaryTextColor();
-        statusChipMeta.setTextColor(metaColor);
-        statusChipMetaIcon.setImageTintList(ColorStateList.valueOf(metaColor));
+                mixColor(cardColor(), tint, amount * 1.6f), dp(18)));
+        statusArt.setVisibility(detail ? View.VISIBLE : View.GONE);
+        if (detail) statusArt.setImageResource(courseArtResId(shown));
+        statusChipLabel.setTextColor(tint);
+        statusChipIcon.setImageTintList(ColorStateList.valueOf(tint));
+        statusChipCountdown.setTextColor(accentColor());
+        statusChipName.setTextColor(primaryTextColor());
+        statusChipMeta.setTextColor(secondaryTextColor());
+        statusChipRoom.setTextColor(secondaryTextColor());
+        statusChipTeacher.setTextColor(secondaryTextColor());
+        statusChipWeeks.setTextColor(secondaryTextColor());
+        statusChipDate.setTextColor(secondaryTextColor());
+        statusChip.setContentDescription(label + (countdown.isEmpty() ? "" : "，" + countdown)
+                + (detail ? "，" + shown.name + "，" + statusChipMeta.getText() + "，" + statusChipRoom.getText()
+                    + "，" + statusChipTeacher.getText() + "，" + statusChipDate.getText() + "，" + weekDetail : "")
+                + (previewMode ? "，点击返回本周" : ""));
         statusChip.setOnClickListener(previewMode ? view -> returnToCurrentWeek() : null);
     }
 
@@ -1325,15 +1383,17 @@ public class MainActivity extends AppCompatActivity {
         boolean previewing = viewingWeek != 0;
         int week = displayedViewingWeek();
         int total = totalCalendarWeeks();
-        weekRangeText.setText(weekRangeLabel(week));
-        weekRangeText.setTextColor(previewing ? accentColor() : primaryTextColor());
-        weekRangeText.setBackground(interactiveSurfaceBackground(
-                previewing ? accentContainerColor() : tonalContainerColor(), dp(14)));
+        weekRangeText.setText(displayedWeekRangeLabel(week));
+        weekRangeText.setContentDescription("第" + week + "周，" + displayedWeekRangeLabel(week) + "，点击选择周次");
+        weekRangeText.setTextColor(previewing ? accentColor() : secondaryTextColor());
+        weekRangeText.setBackground(null);
         boolean canPrev = week > 1;
         boolean canNext = week < total;
         weekPrevButton.setEnabled(canPrev);
+        ((View) weekPrevButton.getParent()).setEnabled(canPrev);
         weekPrevButton.setAlpha(canPrev ? 1f : 0.35f);
         weekNextButton.setEnabled(canNext);
+        ((View) weekNextButton.getParent()).setEnabled(canNext);
         weekNextButton.setAlpha(canNext ? 1f : 0.35f);
         weekLiveBadge.setVisibility(previewing ? View.VISIBLE : View.GONE);
     }
@@ -1353,6 +1413,18 @@ public class MainActivity extends AppCompatActivity {
         picker.setOrientation(LinearLayout.VERTICAL);
         picker.setPadding(dp(12), dp(4), dp(12), dp(8));
         pickerScroll.addView(picker);
+        LinearLayout pickerNav = new LinearLayout(this);
+        pickerNav.setGravity(Gravity.CENTER_VERTICAL);
+        View prevTarget = (View) weekPrevButton.getParent();
+        View nextTarget = (View) weekNextButton.getParent();
+        if (prevTarget.getParent() != null) ((ViewGroup) prevTarget.getParent()).removeView(prevTarget);
+        if (nextTarget.getParent() != null) ((ViewGroup) nextTarget.getParent()).removeView(nextTarget);
+        pickerNav.addView(prevTarget, new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP)));
+        TextView pickerTitle = new TextView(this); pickerTitle.setText("选择周次");
+        pickerTitle.setTextColor(primaryTextColor()); pickerTitle.setTextSize(16); pickerTitle.setGravity(Gravity.CENTER);
+        pickerNav.addView(pickerTitle, new LinearLayout.LayoutParams(0, dp(TOUCH_TARGET_DP), 1f));
+        pickerNav.addView(nextTarget, new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP)));
+        picker.addView(pickerNav);
 
         final AlertDialog[] dialogRef = new AlertDialog[1];
         final int columns = 5;
@@ -1430,7 +1502,13 @@ public class MainActivity extends AppCompatActivity {
             render();
             return;
         }
+        if (viewingWeek != 0) updateStatusChip(null, null, true);
+        else {
+            Course current = currentCourseInProgress();
+            updateStatusChip(current, current == null ? nextUpcomingCourseFromToday() : null, false);
+        }
         invalidateCourseProgressViews(courseList);
+        updateCurrentTimeLine();
     }
 
     private String temporalSignature() {
@@ -1507,7 +1585,9 @@ public class MainActivity extends AppCompatActivity {
     private void renderDayTabs() {
         dayTabs.removeAllViews();
         boolean compact = isCompactWidth();
-        int today = currentSchoolDay();
+        int week = displayedViewingWeek();
+        long today = startOfTodayMillis();
+        SimpleDateFormat dateFormat = new SimpleDateFormat("M/d", Locale.CHINA);
         for (int i = 0; i < DAYS.length; i++) {
             final int day = i;
             LinearLayout tabContainer = new LinearLayout(this);
@@ -1517,20 +1597,21 @@ public class MainActivity extends AppCompatActivity {
 
             // 状态：今天用深蓝色，选中用青绿色
             int textColor;
-            boolean isToday = day == today;
+            long displayedDate = displayedDateMillis(week, day);
+            boolean isToday = displayedDate == today;
             boolean isSelected = day == selectedDay;
 
             if (isSelected) {
-                textColor = accentColor();
+                textColor = Color.WHITE;
             } else if (isToday) {
                 textColor = todayColor();
             } else {
                 textColor = secondaryTextColor();
             }
 
-            tabContainer.setBackground(buttonBackground(Color.TRANSPARENT, dp(18)));
+            tabContainer.setBackground(buttonBackground(isSelected ? Color.TRANSPARENT : Color.argb(120, 255, 255, 255), dp(18)));
             tabContainer.setSelected(isSelected);
-            tabContainer.setContentDescription(DAYS[i]
+            tabContainer.setContentDescription(DAYS[i] + "，" + formatDate(displayedDate)
                     + (isToday ? "\uff0c\u4eca\u5929" : "")
                     + (isSelected ? "\uff0c\u5df2\u9009\u62e9" : ""));
             tabContainer.setOnClickListener(view -> switchToDay(day));
@@ -1543,15 +1624,30 @@ public class MainActivity extends AppCompatActivity {
             dayText.setTextColor(textColor);
             tabContainer.addView(dayText);
 
+            TextView dateText = new TextView(this);
+            dateText.setText(dateFormat.format(new java.util.Date(displayedDate)));
+            dateText.setTextSize(12);
+            dateText.setTypeface(appTypefaceMedium());
+            dateText.setGravity(Gravity.CENTER);
+            dateText.setTextColor(textColor);
+            dateText.setIncludeFontPadding(false);
+            dateText.setSingleLine(true);
+            LinearLayout.LayoutParams dateParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            dateParams.topMargin = dp(2);
+            tabContainer.addView(dateText, dateParams);
+
             // 今天添加小圆点指示器，颜色跟随文字状态
             View todayMarker = new View(this);
-            int markerColor = isSelected ? accentColor() : todayColor();
+            int markerColor = isSelected ? Color.WHITE : todayColor();
             todayMarker.setBackground(buttonBackground(isToday ? markerColor : Color.TRANSPARENT, dp(3)));
             LinearLayout.LayoutParams markerParams = new LinearLayout.LayoutParams(dp(5), dp(5));
             markerParams.setMargins(0, dp(4), 0, 0);
             tabContainer.addView(todayMarker, markerParams);
 
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(compact ? 62 : 70), dp(compact ? 48 : 52));
+            tabContainer.setMinimumHeight(dp(compact ? 64 : 68));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    dp(compact ? 62 : 70), ViewGroup.LayoutParams.WRAP_CONTENT);
             params.setMargins(0, 0, dp(2), 0);
             dayTabs.addView(tabContainer, params);
         }
@@ -1633,7 +1729,7 @@ public class MainActivity extends AppCompatActivity {
         params.height = selectedTab.getHeight();
         daySelectionSlider.setLayoutParams(params);
         // brief §6：选中态是"浅蓝紫药丸 + 蓝字 + 下方圆点"，不要描边
-        daySelectionSlider.setBackground(roundedSurface(selectedDayColor(), dp(20), Color.TRANSPARENT));
+        daySelectionSlider.setBackground(roundedSurface(accentColor(), dp(20), Color.TRANSPARENT));
 
         float target = selectedTab.getLeft();
         daySelectionSlider.animate().cancel();
@@ -1676,6 +1772,8 @@ public class MainActivity extends AppCompatActivity {
     private void renderCourseList() {
         cancelCourseCardAnimations(courseList);
         courseList.removeAllViews();
+        timelineRows.clear(); timelineCourses.clear();
+        currentTimeOverlay.setVisibility(View.GONE);
         List<Course> dayCourses = new ArrayList<>();
         if (storageLocked) {
             TextView warning = new TextView(this);
@@ -1822,59 +1920,133 @@ public class MainActivity extends AppCompatActivity {
         }
 
         for (int i = 0; i < dayCourses.size(); i++) {
-            courseList.addView(createTimelineRow(
-                    dayCourses.get(i), i == 0, i == dayCourses.size() - 1));
+            View row = createTimelineRow(dayCourses.get(i), i == 0, i == dayCourses.size() - 1);
+            courseList.addView(row);
+            timelineRows.add(row); timelineCourses.add(dayCourses.get(i));
         }
+        timelineContainer.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+            @Override public boolean onPreDraw() {
+                if (timelineContainer.getViewTreeObserver().isAlive()) timelineContainer.getViewTreeObserver().removeOnPreDrawListener(this);
+                updateCurrentTimeLine(); return true;
+            }
+        });
     }
 
-    /**
-     * 课程卡片右下角装饰插画：按课程名关键词匹配主题小物件。
-     *
-     * 归类顺序有意固定：外语 → 程序/数据 → 计算机硬件 → 数理，避免"计算机组成原理"
-     * 被更宽泛的规则先截走。全部不命中时按课程名哈希稳定选取，保证同一门课每次渲染一致。
-     */
-    private int courseArtResId(Course course) {
-        String name = course.name == null
-                ? ""
-                : course.name.toLowerCase(java.util.Locale.ROOT);
-
-        if (containsAny(name, "英语", "english", "日语", "德语", "法语", "俄语", "外语",
-                "口语", "听力", "翻译", "写作")) {
-            return R.drawable.art_english;
-        }
-        if (containsAny(name, "数据结构", "算法", "编程", "程序", "代码", "软件", "数据库",
-                "操作系统", "编译", "语言", "人工智能", "机器学习")) {
-            return R.drawable.art_data;
-        }
-        if (containsAny(name, "计算机", "组成", "计组", "芯片", "硬件", "电路", "数字逻辑",
-                "微机", "嵌入式", "网络", "通信", "电子")) {
-            return R.drawable.art_computer;
-        }
-        if (containsAny(name, "数学", "高数", "代数", "几何", "微积分", "统计", "概率",
-                "线性", "离散", "物理", "化学", "力学", "分析", "数值")) {
-            return R.drawable.art_math;
-        }
-
-        int[] pool = {
-                R.drawable.art_math,
-                R.drawable.art_data,
-                R.drawable.art_computer,
-                R.drawable.art_english
-        };
-        int hash = 0;
-        for (int i = 0; i < name.length(); i++) {
-            hash = hash * 31 + name.charAt(i);
-        }
-        return pool[Math.abs(hash % pool.length)];
+    /** Clamp a time interval to measured anchors, never extrapolate outside the list. */
+    private static float timelinePosition(long now, long start, long end, float top, float bottom) {
+        if (end <= start) return top;
+        double progress = Math.max(0d, Math.min(1d, (double) (now - start) / (end - start)));
+        return top + (float) progress * Math.max(0f, bottom - top);
     }
 
-    private boolean containsAny(String text, String... keys) {
-        for (String key : keys) {
-            if (text.contains(key)) {
-                return true;
+    private float timelineAnchorTop(int index) {
+        return courseList.getTop() + timelineRows.get(index).getTop() + dp(TIMELINE_DOT_TOP_DP);
+    }
+    private float timelineAnchorBottom(int index) {
+        View row = timelineRows.get(index);
+        return Math.max(timelineAnchorTop(index), courseList.getTop() + row.getBottom()
+                - row.getPaddingBottom() - dp(12));
+    }
+
+    private void updateCurrentTimeLine() {
+        if (currentTimeOverlay == null) return;
+        for (View row : timelineRows) {
+            View clock = row.findViewWithTag("timeline-start-clock");
+            if (clock != null) clock.setVisibility(View.VISIBLE);
+        }
+        int week = displayedViewingWeek();
+        long date = displayedDateMillis(week, selectedDay);
+        if (viewingWeek != 0 || week != currentTeachingWeek() || date != startOfTodayMillis()
+                || timelineRows.isEmpty() || timelineRows.get(0).getHeight() == 0) {
+            currentTimeOverlay.setVisibility(View.GONE); return;
+        }
+        long now = uiNowMillis();
+        int previousStart = -1;
+        for (Course course : timelineCourses) {
+            if (courseStartMinutes(course) < previousStart || courseEndMinutes(course) <= courseStartMinutes(course)) {
+            currentTimeOverlay.setVisibility(View.GONE); return;
+            }
+            previousStart = courseStartMinutes(course);
+        }
+        currentTimeY = timelineAnchorBottom(timelineRows.size() - 1);
+        for (int i = 0; i < timelineCourses.size(); i++) {
+            Course course = timelineCourses.get(i);
+            long start = timeOnDateMillis(date, courseStartMinutes(course));
+            long end = timeOnDateMillis(date, courseEndMinutes(course));
+            if (now < start) {
+                if (i == 0) currentTimeY = timelineAnchorTop(0);
+                else {
+                    long previousEnd = timeOnDateMillis(date, courseEndMinutes(timelineCourses.get(i - 1)));
+                    currentTimeY = timelinePosition(now, previousEnd, start,
+                            courseList.getTop() + timelineRows.get(i - 1).getBottom() - timelineRows.get(i - 1).getPaddingBottom(),
+                            courseList.getTop() + timelineRows.get(i).getTop());
+                }
+                break;
+            }
+            if (now <= end) {
+                currentTimeY = timelinePosition(now, start, end, timelineAnchorTop(i), timelineAnchorBottom(i));
+                break;
             }
         }
-        return false;
+        int clearance = dp((int) Math.ceil(AUX_TEXT_SP * getResources().getConfiguration().fontScale + 4));
+        for (int i = 0; i < timelineRows.size(); i++) if (Math.abs(currentTimeY - timelineAnchorTop(i)) < clearance) {
+            View clock = timelineRows.get(i).findViewWithTag("timeline-start-clock");
+            if (clock != null) clock.setVisibility(View.INVISIBLE);
+        }
+        currentTimeOverlay.setVisibility(View.VISIBLE);
+        currentTimeOverlay.setContentDescription(clockText(currentMinutes()) + "，现在");
+        currentTimeOverlay.invalidate();
+    }
+
+    /** Overlay is visible in the gutter; card content is never crossed by a line. */
+    private final class CurrentTimeOverlay extends View {
+        private final android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        CurrentTimeOverlay() { super(MainActivity.this); setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO); }
+        @Override protected void onDraw(android.graphics.Canvas canvas) {
+            super.onDraw(canvas);
+            if (timelineRows.isEmpty()) return;
+            View row = timelineRows.get(0);
+            float x = row.getLeft() + ((ViewGroup) row).getChildAt(0).getWidth() - dp(TIMELINE_LINE_INSET_DP);
+            float y = currentTimeY;
+            paint.setColor(accentColor()); paint.setStyle(android.graphics.Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(1));
+            paint.setPathEffect(new android.graphics.DashPathEffect(new float[]{dp(4), dp(3)}, 0));
+            // Only cross the full width when the line is physically between card surfaces.
+            boolean blank = true;
+            for (int i = 0; i < timelineRows.size(); i++) {
+                View item = timelineRows.get(i);
+                float top = courseList.getTop() + item.getTop();
+                float bottom = courseList.getTop() + item.getBottom() - item.getPaddingBottom();
+                if (y >= top && y <= bottom) { blank = false; break; }
+            }
+            float right = blank ? getWidth() - dp(40) : row.getLeft() + ((ViewGroup) row).getChildAt(0).getWidth();
+            canvas.drawLine(x, y, right, y, paint);
+            paint.setPathEffect(null); paint.setStyle(android.graphics.Paint.Style.FILL);
+            canvas.drawCircle(x, y, dp(3), paint);
+            paint.setTypeface(appTypeface(Typeface.BOLD)); paint.setTextSize(11 * getResources().getDisplayMetrics().scaledDensity);
+            String time = clockText(currentMinutes());
+            // Near a course-start anchor the redundant gutter label is hidden;
+            // the full course time stays visible inside the card.
+            float baseline = y - (paint.ascent() + paint.descent()) / 2;
+            canvas.drawText(time, Math.max(dp(1), x - dp(7) - paint.measureText(time)), baseline, paint);
+            if (blank) {
+                android.graphics.RectF tag = new android.graphics.RectF(getWidth() - dp(35), y - dp(8), getWidth() - dp(3), y + dp(8));
+                canvas.drawRoundRect(tag, dp(4), dp(4), paint);
+                paint.setColor(Color.WHITE); paint.setTextSize(10 * getResources().getDisplayMetrics().scaledDensity);
+                canvas.drawText("现在", tag.centerX() - paint.measureText("现在") / 2, y - (paint.ascent() + paint.descent()) / 2, paint);
+            }
+        }
+    }
+
+    /** Match decorative flowers/books to the existing card color without changing stored colors. */
+    private int courseArtResId(Course course) {
+        int red = Color.red(course.color);
+        int green = Color.green(course.color);
+        int blue = Color.blue(course.color);
+        if (red > green) {
+            return blue > green ? R.drawable.art_flower_lavender : R.drawable.art_flower_peach;
+        }
+        return R.drawable.art_flower_mint;
     }
 
     /**
@@ -1893,6 +2065,10 @@ public class MainActivity extends AppCompatActivity {
         return icon;
     }
 
+    private int metaIconColor(int textColor) {
+        return mixColor(textColor, primaryTextColor(), 0.22f);
+    }
+
     /** 卡片详情里的一个「线性图标 + 文本」小组，用于地点 / 教师。 */
     private LinearLayout detailGroup(int iconResId, String text, int color, boolean first) {
         LinearLayout group = new LinearLayout(this);
@@ -1908,13 +2084,12 @@ public class MainActivity extends AppCompatActivity {
         }
         group.setLayoutParams(groupParams);
 
-        // 图标与字号都收到 11：时间轴改成"时间+圆点"同行后 gutter 加宽到 50dp，
-        // 详情行必须再紧一档，才能把"锡科503"这类地点完整放下。
-        group.addView(iconView(iconResId, color, 11, dp(4)));
+        // Keep meta icons slightly stronger than text; long text uses ellipsis.
+        group.addView(iconView(iconResId, metaIconColor(color), META_ICON_DP, dp(4)));
 
         TextView label = new TextView(this);
         label.setText(text);
-        label.setTextSize(11);
+        label.setTextSize(AUX_TEXT_SP);
         label.setTypeface(appTypeface(Typeface.NORMAL));
         label.setTextColor(color);
         label.setIncludeFontPadding(false);
@@ -1944,7 +2119,7 @@ public class MainActivity extends AppCompatActivity {
         boolean compact = isCompactWidth();
         boolean current = isCourseActive(course);
         boolean completed = courseTemporalState(course) == TimetableRules.TemporalState.COMPLETED;
-        int gapDp = current ? 18 : 12;
+        int gapDp = isFirst || isLast ? 12 : 28;
 
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -1962,7 +2137,10 @@ public class MainActivity extends AppCompatActivity {
         FrameLayout gutter = new FrameLayout(this);
         // gutter 50dp：时间和圆点要排在同一行（效果图是 "08:00 ●"），比原来纵向堆叠更占宽。
         // 再多就会把卡片里的周次和地点挤成省略号。
-        int gutterWidthDp = compact ? 50 : 58;
+        android.text.TextPaint clockPaint = new android.text.TextPaint();
+        clockPaint.setTextSize(11 * getResources().getDisplayMetrics().scaledDensity);
+        int gutterWidthDp = Math.max(compact ? 54 : 58,
+                (int) Math.ceil(clockPaint.measureText("23:59") / getResources().getDisplayMetrics().density) + 20);
         LinearLayout.LayoutParams gutterParams = new LinearLayout.LayoutParams(
                 dp(gutterWidthDp), ViewGroup.LayoutParams.MATCH_PARENT);
         // 关键：row 有 gapDp 的底部 padding，而 MATCH_PARENT 不含 padding 区——
@@ -2013,8 +2191,9 @@ public class MainActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(TIMELINE_DOT_TOP_DP * 2)));
 
         TextView clock = new TextView(this);
+        clock.setTag("timeline-start-clock");
         clock.setText(clockText(courseStartMinutes(course)));
-        clock.setTextSize(10);
+        clock.setTextSize(AUX_TEXT_SP);
         clock.setTypeface(current ? appTypefaceMedium() : appTypeface(Typeface.NORMAL));
         clock.setTextColor(current ? accentColor() : secondaryTextColor());
         clock.setIncludeFontPadding(false);
@@ -2076,25 +2255,25 @@ public class MainActivity extends AppCompatActivity {
         boolean completed = temporalState == TimetableRules.TemporalState.COMPLETED;
         boolean compact = isCompactWidth();
         // 详情拆成两行后卡片变高，下限与进行中卡片的锁定高度同步放宽，避免裁切
-        int minHeightDp = active ? (compact ? 152 : 160) : (compact ? 108 : 116);
+        int minHeightDp = active ? 126 : 100;
         BoundedMaterialCardView shell = new BoundedMaterialCardView(this);
         shell.setMinimumHeight(dp(minHeightDp));
-        // 仅进行中卡片锁定最大高度（稳定倒计时/进度动画）；
+        // 所有状态均按内容自适应，避免动态字体裁切；
         // 普通与灰化卡片高度随内容自适应，两行课程名 + 时间胶囊 + 信息行不再被裁切，
         // 系统大字号、竖屏窄屏同样安全。
-        shell.setMaxHeightPx(active ? dp(compact ? 176 : 186) : 0);
+        shell.setMaxHeightPx(0);
         // brief §10：主要卡片统一 16dp 圆角（原来是 24/28，偏"胖"）
         shell.setRadius(dp(RADIUS_CARD));
         shell.setCardElevation(dp(active ? 5 : 1));
         // brief §5 + 效果图：当前课是"浅蓝紫底 + 细蓝描边 + 深色字"。
         // 填充与描边的浓度是照效果图量的：描边必须明显看得出来，否则整屏会糊成一片白。
         shell.setCardBackgroundColor(active
-                ? mixColor(cardColor(), accentColor(), isDarkMode ? 0.38f : 0.24f)
-                : mixColor(cardColor(), course.color, isDarkMode ? 0.26f : 0.20f));
+                ? mixColor(cardColor(), accentColor(), isDarkMode ? 0.38f : 0.10f)
+                : mixColor(cardColor(), course.color, isDarkMode ? 0.26f : 0.10f));
         shell.setStrokeWidth(dp(active ? 2 : 1));
         shell.setStrokeColor(active
                 ? mixColor(cardColor(), accentColor(), isDarkMode ? 0.88f : 0.62f)
-                : mixColor(cardColor(), course.color, isDarkMode ? 0.62f : 0.52f));
+                : mixColor(cardColor(), course.color, isDarkMode ? 0.62f : 0.32f));
         shell.setClipChildren(true);
         shell.setClipToPadding(true);
         shell.setClipToOutline(true);
@@ -2107,11 +2286,11 @@ public class MainActivity extends AppCompatActivity {
             ));
         }
 
-        // 插画浓度：所有卡片（含当前课）统一用 COURSE_ART_ALPHA（0.95），
+        // 插画浓度按普通/已结束状态分别使用冻结的设计 Token，
         // 与预览模式一致；不再按 active 压低，也不再上色滤镜（色滤会把水彩变成单色剪影）。
         android.widget.ImageView courseArt = new android.widget.ImageView(this);
         courseArt.setImageResource(courseArtResId(course));
-        courseArt.setAlpha(COURSE_ART_ALPHA);
+        courseArt.setAlpha(courseArtAlpha(completed));
         courseArt.setScaleType(android.widget.ImageView.ScaleType.FIT_END);
         courseArt.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         FrameLayout.LayoutParams artParams = new FrameLayout.LayoutParams(
@@ -2128,10 +2307,10 @@ public class MainActivity extends AppCompatActivity {
         card.setClipChildren(true);
         card.setClipToPadding(true);
         card.setPadding(
-                dp(active ? (compact ? 16 : 20) : (compact ? 14 : 16)),
-                dp(active ? (compact ? 20 : 22) : (compact ? 14 : 16)),
-                dp(active ? (compact ? 16 : 20) : (compact ? 14 : 16)),
-                dp(active ? (compact ? 20 : 22) : (compact ? 14 : 16))
+                dp(12),
+                dp(12),
+                dp(12),
+                dp(12)
         );
         shell.addView(card, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -2143,7 +2322,7 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout badge = new LinearLayout(this);
         badge.setOrientation(LinearLayout.VERTICAL);
         badge.setGravity(Gravity.CENTER);
-        badge.setPadding(dp(compact ? 10 : 12), dp(8), dp(compact ? 10 : 12), dp(8));
+        badge.setPadding(dp(4), dp(10), dp(4), dp(10));
         // 当前课现在是浅底，徽章回到实心课程色（原来半透明白是为了配深色实心底）
         badge.setBackground(buttonBackground(course.color, dp(active ? 20 : 16)));
 
@@ -2188,7 +2367,7 @@ public class MainActivity extends AppCompatActivity {
         labelParams.setMargins(0, dp(2), 0, 0);
         badge.addView(periodLabel, labelParams);
 
-        card.addView(badge, new LinearLayout.LayoutParams(dp(active ? 64 : 56), ViewGroup.LayoutParams.WRAP_CONTENT));
+        card.addView(badge, new LinearLayout.LayoutParams(dp(active ? 56 : 52), ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // 中间课程信息
         LinearLayout info = new LinearLayout(this);
@@ -2201,6 +2380,7 @@ public class MainActivity extends AppCompatActivity {
 
         TextView name = new TextView(this);
         name.setText(course.name);
+        name.setPadding(0, 0, dp(32), 0);
         name.setTextColor(primaryTextColor());
         name.setTextSize(active ? (compact ? 20 : 21) : (compact ? 17 : 18));
         name.setTypeface(appTypefaceSemiBold());
@@ -2209,18 +2389,17 @@ public class MainActivity extends AppCompatActivity {
         name.setEllipsize(TextUtils.TruncateAt.END);
         info.addView(name);
 
-        // 时间行：线性时钟 + 时间。照示意图不加药丸底色，也不在这里塞周次
-        // （周次已挪到下面的详情行，与地点、教师并排）。
+        // The pale time pill wraps only its clock and complete time range.
         LinearLayout timeRow = new LinearLayout(this);
         timeRow.setOrientation(LinearLayout.HORIZONTAL);
         timeRow.setGravity(Gravity.CENTER_VERTICAL);
         // 效果图里时间文字下面垫着一层极淡的圆角底
         timeRow.setPadding(dp(7), dp(3), dp(9), dp(3));
         timeRow.setBackground(buttonBackground(
-                active ? Color.argb(56, 255, 255, 255) : tonalContainerColor(), dp(9)));
+                active ? Color.argb(40, 255, 255, 255) : mixColor(accentColor(), cardColor(), 0.95f), dp(9)));
 
         int timeFg = accentColor();
-        timeRow.addView(iconView(R.drawable.ic_clock_outline, timeFg, 12, dp(4)));
+        timeRow.addView(iconView(R.drawable.ic_clock_outline, timeFg, META_ICON_DP, dp(4)));
 
         TextView time = new TextView(this);
         time.setText(periodRangeTime(course));
@@ -2233,7 +2412,7 @@ public class MainActivity extends AppCompatActivity {
         timeRow.addView(time);
 
         LinearLayout.LayoutParams timeParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
         timeParams.setMargins(0, dp(6), 0, 0);
@@ -2249,56 +2428,35 @@ public class MainActivity extends AppCompatActivity {
             info.addView(remaining, remainingParams);
         }
 
-        // 详情拆两行。保留时间轴后横向只剩约 140dp，而三组一行实测需要 168dp
-        // （周次 46 + 地点 56 + 教师 52 + 间距 14），硬排会把三组全部截断：
-        //   第一行：周次 + 地点      第二行：教师
         int detailFg = secondaryTextColor();
-        String weeksText = course.invalidWeeks ? "上课周待修正"
-                : (course.weeks == null ? "" : course.weeks);
-        boolean hasWeeks = !weeksText.isEmpty();
-        boolean hasRoom = course.room != null && !course.room.isEmpty();
-        boolean hasTeacher = course.teacher != null && !course.teacher.isEmpty();
-
-        if (hasWeeks || hasRoom) {
-            LinearLayout detailLine1 = new LinearLayout(this);
-            detailLine1.setOrientation(LinearLayout.HORIZONTAL);
-            detailLine1.setGravity(Gravity.CENTER_VERTICAL);
-            boolean first = true;
-            if (hasWeeks) {
-                detailLine1.addView(detailGroup(
-                        course.invalidWeeks ? R.drawable.ic_warning : R.drawable.ic_calendar_outline,
-                        weeksText, detailFg, first));
-                first = false;
-            }
-            if (hasRoom) {
-                detailLine1.addView(detailGroup(R.drawable.ic_location, course.room, detailFg, first));
-            }
-            LinearLayout.LayoutParams line1Params = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-            );
-            line1Params.setMargins(0, dp(6), 0, 0);
-            info.addView(detailLine1, line1Params);
+        String weeksText = course.invalidWeeks ? "上课周待修正" : course.weeks;
+        LinearLayout locationRow = new LinearLayout(this);
+        locationRow.setGravity(Gravity.CENTER_VERTICAL);
+        locationRow.addView(detailGroup(R.drawable.ic_location,
+                TextUtils.isEmpty(course.room) ? "地点未填" : course.room, detailFg, true));
+        locationRow.addView(detailGroup(R.drawable.ic_person,
+                TextUtils.isEmpty(course.teacher) ? "教师未填" : course.teacher, detailFg, false));
+        LinearLayout.LayoutParams locationParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        locationParams.topMargin = dp(8);
+        info.addView(locationRow, locationParams);
+        if (!TextUtils.isEmpty(weeksText)) {
+            LinearLayout weeksRow = new LinearLayout(this);
+            weeksRow.addView(detailGroup(course.invalidWeeks ? R.drawable.ic_warning : R.drawable.ic_calendar_outline,
+                    weeksText, detailFg, true));
+            LinearLayout.LayoutParams weeksParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            weeksParams.topMargin = dp(4);
+            info.addView(weeksRow, weeksParams);
         }
-
-        if (hasTeacher) {
-            LinearLayout detailLine2 = new LinearLayout(this);
-            detailLine2.setOrientation(LinearLayout.HORIZONTAL);
-            detailLine2.setGravity(Gravity.CENTER_VERTICAL);
-            detailLine2.addView(detailGroup(R.drawable.ic_person, course.teacher, detailFg, true));
-            LinearLayout.LayoutParams line2Params = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-            );
-            line2Params.setMargins(0, dp(3), 0, 0);
-            info.addView(detailLine2, line2Params);
-        }
+        info.setContentDescription(course.name + "，" + periodRangeTime(course) + "，" + course.room
+                + "，" + course.teacher + "，" + weeksText);
 
         // 右侧编辑按钮：按示意图做成"右上角的小白圆"——更小、贴顶、对比更强。
         ImageButton edit = new ImageButton(this);
         edit.setImageResource(R.drawable.ic_more_horizontal);
         edit.setImageTintList(ColorStateList.valueOf(primaryTextColor()));
-        edit.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+        edit.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         // 近白卡片上纯色圆块对比不足，看不出是个按钮；改用"白底 + 1dp 细描边 + 轻阴影"，
         // 与示意图里那颗浮起的白圆一致。当前课现在也是浅底，所以两种状态共用同一种做法。
         edit.setBackground(elevatedCardBackground(cardColor(), dp(18)));
@@ -2306,10 +2464,12 @@ public class MainActivity extends AppCompatActivity {
         edit.setPadding(dp(8), dp(8), dp(8), dp(8));
         edit.setContentDescription("\u7f16\u8f91\u8bfe\u7a0b");
         edit.setOnClickListener(view -> showCourseDialog(course));
-        LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(dp(36), dp(36));
+        LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP));
         // 水平 LinearLayout 中 layout_gravity 控制纵向位置：贴顶对齐，和示意图一致
         editParams.gravity = Gravity.TOP;
-        card.addView(edit, editParams);
+        FrameLayout.LayoutParams overlayEditParams = new FrameLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP), Gravity.TOP | Gravity.END);
+        overlayEditParams.setMargins(0, dp(4), dp(4), 0);
+        shell.addView(touchContainer(edit, MORE_VISUAL_DP), overlayEditParams);
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -2325,9 +2485,7 @@ public class MainActivity extends AppCompatActivity {
         // 已完成课程不再压灰罩，靠"时间轴圆点降饱和 + 插画减淡"区分。
         // 插画减淡原来取 0.10（实测等于隐形，用户照片里三张卡两张看不到图案），
         // 提到 0.40：仍明显弱于普通卡的 0.95，但图案能认出来。
-        if (completed) {
-            courseArt.setAlpha(0.40f);
-        }
+
         boolean approaching = temporalState == TimetableRules.TemporalState.REMINDER_WINDOW;
         boolean shakeEnabled = approaching && animationsEnabled();
         if (shakeEnabled) {
@@ -2720,8 +2878,24 @@ public class MainActivity extends AppCompatActivity {
         return (now - start) / (float) (end - start);
     }
 
+    private boolean isolatedVisualValidation() {
+        return BuildConfig.ENABLE_TEST_COURSE && getPackageName().endsWith(".validation");
+    }
+
+    private long uiNowMillis() {
+        return isolatedVisualValidation() && uiValidationNowMillis > 0
+                ? uiValidationNowMillis : System.currentTimeMillis();
+    }
+
+    private float courseArtAlpha(boolean completed) {
+        if (isolatedVisualValidation() && uiValidationArtAlpha >= 0)
+            return Math.max(0f, Math.min(1f, uiValidationArtAlpha));
+        return completed ? COURSE_ART_ALPHA_COMPLETED : COURSE_ART_ALPHA_NORMAL;
+    }
+
     private int currentSeconds() {
         Calendar calendar = Calendar.getInstance();
+        calendar.setTimeInMillis(uiNowMillis());
         return calendar.get(Calendar.HOUR_OF_DAY) * 3600
                 + calendar.get(Calendar.MINUTE) * 60
                 + calendar.get(Calendar.SECOND);
@@ -2729,6 +2903,7 @@ public class MainActivity extends AppCompatActivity {
 
     private int currentMinutes() {
         Calendar calendar = Calendar.getInstance();
+        calendar.setTimeInMillis(uiNowMillis());
         return calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE);
     }
 
@@ -3127,7 +3302,7 @@ public class MainActivity extends AppCompatActivity {
         scroller.addView(panel);
 
         panel.addView(settingsSectionLabel("\u8bfe\u8868"));
-        panel.addView(settingsMenuRow(R.drawable.ic_file_text, "\u5bfc\u5165 PDF \u8bfe\u8868", "\u4ece\u6587\u4ef6\u89e3\u6790\u8bfe\u7a0b\u3001\u5468\u6b21\u548c\u6559\u5ba4", accentColor(), view -> {
+        panel.addView(settingsMenuRow(R.drawable.ic_file_import, "\u5bfc\u5165 PDF \u8bfe\u8868", "\u4ece\u6587\u4ef6\u89e3\u6790\u8bfe\u7a0b\u3001\u5468\u6b21\u548c\u6559\u5ba4", accentColor(), view -> {
             dismissSettings[0].run();
             openPdfPicker();
         }), settingsRowParams());
@@ -3139,7 +3314,7 @@ public class MainActivity extends AppCompatActivity {
             }), settingsRowParams());
         }
         panel.addView(settingsMenuRow(
-                R.drawable.ic_bell,
+                R.drawable.ic_bell_status,
                 "通知状态",
                 notificationStatusText(),
                 accentColor(),
@@ -3274,11 +3449,11 @@ public class MainActivity extends AppCompatActivity {
             swatch.setGravity(Gravity.CENTER);
             swatch.setBackground(swatchStateListBackground(color, isSelected));
             swatch.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            cell.addView(swatch, new LinearLayout.LayoutParams(dp(44), dp(44)));
+            cell.addView(swatch, new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP)));
 
             TextView name = new TextView(this);
             name.setText(ACCENT_PRESET_NAMES[index]);
-            name.setTextSize(11);
+            name.setTextSize(AUX_TEXT_SP);
             name.setTextColor(isSelected ? accentColor() : secondaryTextColor());
             name.setTypeface(appTypeface(isSelected ? Typeface.BOLD : Typeface.NORMAL));
             name.setGravity(Gravity.CENTER);
@@ -3327,9 +3502,9 @@ public class MainActivity extends AppCompatActivity {
         ImageView icon = new ImageView(this);
         icon.setImageResource(iconResId);
         icon.setImageTintList(ColorStateList.valueOf(tintColor));
-        icon.setScaleType(ImageView.ScaleType.CENTER);
+        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
         icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        iconSurface.addView(icon, new FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER));
+        iconSurface.addView(icon, new FrameLayout.LayoutParams(dp(HEADER_ICON_DP), dp(HEADER_ICON_DP), Gravity.CENTER));
         LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(40), dp(40));
         iconParams.setMargins(0, 0, dp(12), 0);
         row.addView(iconSurface, iconParams);
@@ -3365,7 +3540,8 @@ public class MainActivity extends AppCompatActivity {
         arrow.setImageResource(R.drawable.ic_chevron_right);
         arrow.setImageTintList(ColorStateList.valueOf(secondaryTextColor()));
         arrow.setAlpha(0.72f);
-        arrow.setScaleType(ImageView.ScaleType.CENTER);
+        arrow.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        arrow.setPadding(dp(4), dp(12), dp(4), dp(12));
         arrow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         row.addView(arrow, new LinearLayout.LayoutParams(dp(24), dp(40)));
 
@@ -3385,9 +3561,9 @@ public class MainActivity extends AppCompatActivity {
         ImageView icon = new ImageView(this);
         icon.setImageResource(iconResId);
         icon.setImageTintList(ColorStateList.valueOf(tintColor));
-        icon.setScaleType(ImageView.ScaleType.CENTER);
+        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
         icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        iconSurface.addView(icon, new FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER));
+        iconSurface.addView(icon, new FrameLayout.LayoutParams(dp(HEADER_ICON_DP), dp(HEADER_ICON_DP), Gravity.CENTER));
         LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(40), dp(40));
         iconParams.setMargins(0, 0, dp(12), 0);
         row.addView(iconSurface, iconParams);
@@ -4703,6 +4879,7 @@ public class MainActivity extends AppCompatActivity {
 
     private long startOfTodayMillis() {
         Calendar calendar = Calendar.getInstance();
+        calendar.setTimeInMillis(uiNowMillis());
         calendar.set(Calendar.HOUR_OF_DAY, 0);
         calendar.set(Calendar.MINUTE, 0);
         calendar.set(Calendar.SECOND, 0);
@@ -4750,6 +4927,21 @@ public class MainActivity extends AppCompatActivity {
         return calendar.getTimeInMillis();
     }
 
+    /** The sole UI entry point for teaching-week/day dates; delegates to existing rules. */
+    private long displayedDateMillis(int week, int day) {
+        return courseDateMillisForWeek(day, week);
+    }
+
+    private String displayedWeekRangeLabel(int week) {
+        long first = Long.MAX_VALUE, last = Long.MIN_VALUE;
+        for (int day = 0; day < DAYS.length; day++) {
+            long date = displayedDateMillis(week, day);
+            first = Math.min(first, date); last = Math.max(last, date);
+        }
+        SimpleDateFormat format = new SimpleDateFormat("M.d", Locale.CHINA);
+        return format.format(new java.util.Date(first)) + "–" + format.format(new java.util.Date(last));
+    }
+
     private long courseDateMillisForWeek(int schoolDay, int teachingWeek) {
         return TimetableRules.courseDateMillisForWeek(
                 calendarStartMillis(),
@@ -4772,7 +4964,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private SummaryCourse nextUpcomingCourseFromToday() {
-        long now = System.currentTimeMillis();
+        long now = uiNowMillis();
         Course next = null;
         long nextStartAt = Long.MAX_VALUE;
         int totalWeeks = Math.min(calendarTotalWeeks(), TimetableRules.MAX_WEEK);
@@ -4860,7 +5052,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private int currentSchoolDay() {
-        int dayOfWeek = Calendar.getInstance().get(Calendar.DAY_OF_WEEK);
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTimeInMillis(uiNowMillis());
+        int dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK);
         return dayOfWeek == Calendar.SUNDAY ? 6 : dayOfWeek - Calendar.MONDAY;
     }
 
@@ -5500,6 +5694,9 @@ public class MainActivity extends AppCompatActivity {
                 suffixView = null;
                 numberSlot = null;
                 plainView = createCountdownTextView(compact);
+                plainView.setSingleLine(false);
+                plainView.setMaxLines(2);
+                plainView.setEllipsize(null);
                 addView(plainView, new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.WRAP_CONTENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT
@@ -5708,6 +5905,14 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            // Decoration must not make a wrap-content card consume the viewport.
+            int height = MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY
+                    ? MeasureSpec.getSize(heightMeasureSpec) : 0;
+            setMeasuredDimension(getDefaultSize(0, widthMeasureSpec), height);
+        }
+
+        @Override
         protected void onDraw(android.graphics.Canvas canvas) {
             super.onDraw(canvas);
             float progress = Math.max(0f, Math.min(1f, courseProgress(course)));
@@ -5734,6 +5939,16 @@ public class MainActivity extends AppCompatActivity {
             if (maxHeightPx > 0 && getMeasuredHeight() > maxHeightPx) {
                 int cappedHeightSpec = MeasureSpec.makeMeasureSpec(maxHeightPx, MeasureSpec.EXACTLY);
                 super.onMeasure(widthMeasureSpec, cappedHeightSpec);
+            }
+            // Size the progress backdrop after content determines the card height.
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                if (child instanceof CourseProgressView) {
+                    child.measure(MeasureSpec.makeMeasureSpec(
+                                    Math.max(0, getMeasuredWidth() - getPaddingLeft() - getPaddingRight()), MeasureSpec.EXACTLY),
+                            MeasureSpec.makeMeasureSpec(
+                                    Math.max(0, getMeasuredHeight() - getPaddingTop() - getPaddingBottom()), MeasureSpec.EXACTLY));
+                }
             }
         }
     }
