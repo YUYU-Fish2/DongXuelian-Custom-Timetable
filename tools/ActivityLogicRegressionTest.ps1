@@ -34,6 +34,7 @@ $methods = @(
     (Get-MethodBody $source 'private long courseDateMillisForWeek('),
     (Get-MethodBody $source 'private long displayedDateMillis('),
     (Get-MethodBody $source 'private String displayedWeekRangeLabel('),
+    (Get-MethodBody $source 'private static float timelinePosition('),
     (Get-MethodBody $source 'private boolean hasCourseConflict('),
     (Get-MethodBody $source 'private boolean periodsOverlap('),
     (Get-MethodBody $source 'private boolean weeksOverlap('),

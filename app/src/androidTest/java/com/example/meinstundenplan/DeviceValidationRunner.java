@@ -29,6 +29,7 @@ public final class DeviceValidationRunner extends Instrumentation {
     private boolean statusMatrix;
     private boolean referenceScene;
     private String artAlpha;
+    private boolean timelineMatrix;
     private interface Checked { void run() throws Exception; }
 
     @Override public void onCreate(Bundle arguments) {
@@ -37,6 +38,7 @@ public final class DeviceValidationRunner extends Instrumentation {
         statusMatrix = arguments != null && "true".equals(arguments.getString("statusMatrix"));
         referenceScene = arguments != null && "true".equals(arguments.getString("referenceScene"));
         artAlpha = arguments == null ? null : arguments.getString("artAlpha");
+        timelineMatrix = arguments != null && "true".equals(arguments.getString("timelineMatrix"));
         start();
     }
 
@@ -345,6 +347,7 @@ public final class DeviceValidationRunner extends Instrumentation {
         screenshot("baseline_home.png");
         if (referenceScene) {
             screenshot("reference.png");
+            if (timelineMatrix) checkTimelineMatrix();
             passed++; report.append("PASS frozen-scene: 2026-10-01 13:59, preset=0, Thursday, top scroll\n");
             return;
         }
@@ -364,6 +367,53 @@ public final class DeviceValidationRunner extends Instrumentation {
         passed++;
         report.append("PASS visual-baseline: 3 screenshots; fixed Sunday courses, preset=0\n");
     }
+    private void checkTimelineMatrix() throws Exception {
+        final float[] positions = new float[5];
+        int[] minutes = {455, 540, 780, 920, 1000};
+        for (int i = 0; i < minutes.length; i++) {
+            final int index = i, minute = minutes[i];
+            onMain(() -> {
+                Calendar fixed = Calendar.getInstance(); fixed.set(2026, Calendar.OCTOBER, 1, minute / 60, minute % 60, 0);
+                fixed.set(Calendar.MILLISECOND, 0);
+                set(activity, "uiValidationNowMillis", fixed.getTimeInMillis()); call("render");
+            });
+            waitForIdleSync(); SystemClock.sleep(150);
+            test("timeline-position-" + i, () -> onMain(() -> {
+                check(((android.view.View) field(activity, "currentTimeOverlay")).getVisibility() == android.view.View.VISIBLE, "Today line hidden");
+                positions[index] = (float) field(activity, "currentTimeY");
+                check(Float.isFinite(positions[index]), "Invalid timeline coordinate");
+                if (index == 0) check(Math.abs(positions[index] - (float) call("timelineAnchorTop", 0)) < 1, "Before-class clamp wrong");
+                if (index == 4) check(Math.abs(positions[index] - (float) call("timelineAnchorBottom", 2)) < 1, "After-class clamp wrong");
+                if (index > 0) check(positions[index] > positions[index - 1], "Clock did not move forward through rows/gap");
+                if (index == 2) check(positions[index] > (float) call("timelineAnchorBottom", 1)
+                        && positions[index] < (float) call("timelineAnchorTop", 2), "Break line outside adjacent anchors");
+            }));
+            screenshot("timeline-" + i + ".png");
+        }
+        test("timeline-switch-day-hidden", () -> onMain(() -> {
+            set(activity, "selectedDay", 2); call("render"); call("updateCurrentTimeLine");
+            check(((android.view.View) field(activity, "currentTimeOverlay")).getVisibility() == android.view.View.GONE, "Other-day line visible");
+        }));
+        test("timeline-preview-hidden", () -> onMain(() -> {
+            set(activity, "selectedDay", 3); set(activity, "viewingWeek", 6); call("render"); call("updateCurrentTimeLine");
+            check(((android.view.View) field(activity, "currentTimeOverlay")).getVisibility() == android.view.View.GONE, "Preview line visible");
+        }));
+        test("timeline-minute-refresh", () -> {
+            onMain(() -> { set(activity, "viewingWeek", 0); call("render"); }); waitForIdleSync();
+            onMain(() -> {
+                long date = (long) call("displayedDateMillis", 5, 3);
+                set(activity, "uiValidationNowMillis", (long) call("timeOnDateMillis", date, 900));
+                call("refreshTimedUi");
+            }); waitForIdleSync();
+            onMain(() -> {
+                float before = (float) field(activity, "currentTimeY");
+                long now = (long) field(activity, "uiValidationNowMillis");
+                set(activity, "uiValidationNowMillis", now + 60000); call("refreshTimedUi");
+                check((float) field(activity, "currentTimeY") > before, "Minute refresh did not move line");
+            });
+        });
+    }
+
     private void screenshot(String name) throws Exception {
         waitForIdleSync();
         SystemClock.sleep(900);
