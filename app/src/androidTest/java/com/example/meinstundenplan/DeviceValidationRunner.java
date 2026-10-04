@@ -394,7 +394,8 @@ public final class DeviceValidationRunner extends Instrumentation {
             String value = text.getText().toString();
             android.text.Layout layout = text.getLayout();
             boolean requiredFull = view == field(activity, "summaryText") || view == field(activity, "statusChipCountdown")
-                    || value.matches("[0-9]{2}:[0-9]{2}([–-][0-9]{2}:[0-9]{2})?");
+                    || value.matches("[0-9]{2}:[0-9]{2}([–-][0-9]{2}:[0-9]{2})?")
+                    || (value.startsWith("距离下课还有") && (value.contains("分钟") || value.contains("小时")));
             if (requiredFull && !value.isEmpty()) {
                 check(layout != null && layout.getLineCount() > 0, "Missing layout: " + value);
                 for (int i = 0; i < layout.getLineCount(); i++) check(layout.getEllipsisCount(i) == 0, "Clipped text: " + value);
@@ -416,6 +417,8 @@ public final class DeviceValidationRunner extends Instrumentation {
 
     private void checkTimelineMatrix() throws Exception {
         final float[] positions = new float[5];
+        android.view.ViewGroup initialRow = (android.view.ViewGroup) ((List<?>) field(activity, "timelineRows")).get(0);
+        final int normalHeight = initialRow.getChildAt(1).getHeight();
         int[] minutes = {455, 540, 780, 920, 1000};
         for (int i = 0; i < minutes.length; i++) {
             final int index = i, minute = minutes[i];
@@ -464,6 +467,25 @@ public final class DeviceValidationRunner extends Instrumentation {
                 check((float) field(activity, "currentTimeY") > before, "Minute refresh did not move line");
             });
         });
+        test("single-active-card-content-height", () -> {
+            onMain(() -> {
+                Object first = courses().get(0);
+                courses().clear(); courses().add(first);
+                long date = (long) call("displayedDateMillis", 5, 3);
+                set(activity, "uiValidationNowMillis", (long) call("timeOnDateMillis", date, 540));
+                call("render");
+            });
+            waitForIdleSync(); SystemClock.sleep(150);
+            onMain(() -> {
+                android.view.ViewGroup row = (android.view.ViewGroup) ((List<?>) field(activity, "timelineRows")).get(0);
+                android.view.ViewGroup card = (android.view.ViewGroup) row.getChildAt(1);
+                check(card.getHeight() <= normalHeight * 1.6f, "Single active card expanded: " + card.getHeight() + " vs normal " + normalHeight);
+                check(card.getChildAt(0).getHeight() > 0, "Course progress layer disappeared");
+                report.append("MEASURE single active=").append(card.getHeight()).append(" normal=").append(normalHeight).append(" px\n");
+            });
+        });
+        auditMeasuredLayout();
+        screenshot("single-active.png");
     }
 
     private void screenshot(String name) throws Exception {

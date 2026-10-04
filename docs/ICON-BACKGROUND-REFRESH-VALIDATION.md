@@ -31,3 +31,9 @@ Assets generated using built-in image_gen. Hero prompt: preserve the existing ri
 Built-in image_gen produced the new Hero, mint/peach/lavender flowers and books, and transparent corner flowers. Card prompts used one airy watercolor style, pale books/white flowers with mint, peach or lavender accents, genuine alpha, detail concentrated lower-right. Corner prompt used white snow-lotus, mist-blue leaves/petals and feathered wash at lower-left, transparent center; mirrored by layout at right. Functional icons are hand-authored VectorDrawable geometry.
 
 Release signing/migration, long idle/reboot behavior and other phone hardware remain outside this visual refresh verification. Date/storage/reminder/PDF business logic is unchanged.
+
+## Single active course follow-up
+
+A single active course previously measured 1249px tall versus the ordinary 396px fixture card. CourseProgressView used View's default height measurement and inflated the wrap-content parent. The progress backdrop now contributes zero desired height; after content is measured it is sized to the card interior. At native 100% font, the active card is 487px (about 23% taller), with countdown and progress preserved. Plain countdown text can wrap to two lines at larger font sizes.
+
+A real-device regression rejects expansion beyond 1.6x the ordinary fixture card and verifies a nonzero progress layer; the original implementation failed this assertion. Latest native timeline/layout suite: 11 passed. Host/Java compile and standard/isolated builds passed. Full device 32 and status matrix 8 passed after the height fix; narrow/wide 100/130% height checks passed before the final countdown wrapping adjustment. Lint 0 errors/9 existing warnings. Final countdown-wrapping follow-up passed at 354/411dp with 130% font and native 100%; all 11 timeline/layout/single-card checks passed in each run. Reconnected the phone after a transient ADB disconnect and restored density 560/font 1.0/USB stay-awake 0.

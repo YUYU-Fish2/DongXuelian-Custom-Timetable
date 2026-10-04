@@ -5694,6 +5694,9 @@ public class MainActivity extends AppCompatActivity {
                 suffixView = null;
                 numberSlot = null;
                 plainView = createCountdownTextView(compact);
+                plainView.setSingleLine(false);
+                plainView.setMaxLines(2);
+                plainView.setEllipsize(null);
                 addView(plainView, new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.WRAP_CONTENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT
@@ -5902,6 +5905,14 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            // Decoration must not make a wrap-content card consume the viewport.
+            int height = MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY
+                    ? MeasureSpec.getSize(heightMeasureSpec) : 0;
+            setMeasuredDimension(getDefaultSize(0, widthMeasureSpec), height);
+        }
+
+        @Override
         protected void onDraw(android.graphics.Canvas canvas) {
             super.onDraw(canvas);
             float progress = Math.max(0f, Math.min(1f, courseProgress(course)));
@@ -5928,6 +5939,16 @@ public class MainActivity extends AppCompatActivity {
             if (maxHeightPx > 0 && getMeasuredHeight() > maxHeightPx) {
                 int cappedHeightSpec = MeasureSpec.makeMeasureSpec(maxHeightPx, MeasureSpec.EXACTLY);
                 super.onMeasure(widthMeasureSpec, cappedHeightSpec);
+            }
+            // Size the progress backdrop after content determines the card height.
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                if (child instanceof CourseProgressView) {
+                    child.measure(MeasureSpec.makeMeasureSpec(
+                                    Math.max(0, getMeasuredWidth() - getPaddingLeft() - getPaddingRight()), MeasureSpec.EXACTLY),
+                            MeasureSpec.makeMeasureSpec(
+                                    Math.max(0, getMeasuredHeight() - getPaddingTop() - getPaddingBottom()), MeasureSpec.EXACTLY));
+                }
             }
         }
     }

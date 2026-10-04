@@ -47,3 +47,5 @@
 - Date heading and week-range layout remain as approved; verify eyes/face visibility, clear gutter and text contrast on screenshots.
 
 Course time pills wrap the clock and full time range with 7/9dp horizontal padding; light background uses 5% accent tint.
+
+Active course progress decoration does not participate in wrap-content height measurement. Active cards fit their metadata and countdown, rather than expanding to the viewport when only one course is shown. Plain remaining-time text may wrap to two lines for larger fonts.
