@@ -910,10 +910,10 @@ public class MainActivity extends AppCompatActivity {
         header.addView(titleBlock, titleBlockParams);
 
         summaryText = new TextView(this);
-        summaryText.setTextColor(secondaryTextColor());
+        summaryText.setTextColor(primaryTextColor());
         summaryText.setTextSize(15);
-        summaryText.setTypeface(appTypeface(Typeface.NORMAL));
-        summaryText.setAlpha(0.85f);
+        summaryText.setTypeface(appTypefaceMedium());
+        summaryText.setAlpha(1f);
         summaryText.setSingleLine(true);
         summaryText.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams summaryParams = new LinearLayout.LayoutParams(
@@ -1148,37 +1148,27 @@ public class MainActivity extends AppCompatActivity {
         renderDayTabs();
         renderCourseList();
         renderWeekNav();
-        int count = 0;
-        int filterWeek = viewingWeek != 0 ? viewingWeek : currentTeachingWeek();
-        int today = currentSchoolDay();
-        for (Course course : courses) {
-            if (viewingWeek != 0 && course.temporary) {
-                continue;
-            }
-            if (course.day == selectedDay && courseOccursInTeachingWeek(course, filterWeek)) {
-                count++;
-            }
-        }
         Course currentCourse = viewingWeek == 0 ? currentCourseInProgress() : null;
         SummaryCourse nextCourse = currentCourse == null && viewingWeek == 0
                 ? nextUpcomingCourseFromToday() : null;
         int realWeek = currentTeachingWeek();
         String weekText;
         if (viewingWeek != 0) {
-            weekText = "第" + viewingWeek + "周 · ";
+            weekText = "第" + viewingWeek + "周";
         } else if (realWeek >= 1 && realWeek <= calendarTotalWeeks()) {
-            weekText = "第" + realWeek + "周 · ";
+            weekText = "第" + realWeek + "周";
         } else if (startOfTodayMillis() < calendarStartMillis()) {
-            weekText = "未开学 · ";
+            weekText = "未开学";
         } else {
-            weekText = "假期 · ";
+            weekText = "假期";
         }
         summaryText.setText(String.format(
                 Locale.CHINA,
-                "%s%s · %d 门课",
+                "%s · %s · %s",
                 weekText,
                 DAYS[selectedDay],
-                count
+                new SimpleDateFormat("M月d日", Locale.CHINA).format(new java.util.Date(
+                        displayedDateMillis(displayedViewingWeek(), selectedDay)))
         ));
         if (viewingWeek != 0) {
             updateStatusChip(null, null, true);
@@ -1357,7 +1347,8 @@ public class MainActivity extends AppCompatActivity {
         boolean previewing = viewingWeek != 0;
         int week = displayedViewingWeek();
         int total = totalCalendarWeeks();
-        weekRangeText.setText(weekRangeLabel(week));
+        weekRangeText.setText(displayedWeekRangeLabel(week));
+        weekRangeText.setContentDescription("第" + week + "周，" + displayedWeekRangeLabel(week) + "，点击选择周次");
         weekRangeText.setTextColor(previewing ? accentColor() : primaryTextColor());
         weekRangeText.setBackground(interactiveSurfaceBackground(
                 previewing ? accentContainerColor() : tonalContainerColor(), dp(14)));
@@ -4785,6 +4776,17 @@ public class MainActivity extends AppCompatActivity {
         calendar.set(Calendar.SECOND, 0);
         calendar.set(Calendar.MILLISECOND, 0);
         return calendar.getTimeInMillis();
+    }
+
+    /** The sole UI entry point for teaching-week/day dates; delegates to existing rules. */
+    private long displayedDateMillis(int week, int day) {
+        return courseDateMillisForWeek(day, week);
+    }
+
+    private String displayedWeekRangeLabel(int week) {
+        SimpleDateFormat format = new SimpleDateFormat("M.d", Locale.CHINA);
+        return format.format(new java.util.Date(displayedDateMillis(week, 0)))
+                + "–" + format.format(new java.util.Date(displayedDateMillis(week, 6)));
     }
 
     private long courseDateMillisForWeek(int schoolDay, int teachingWeek) {

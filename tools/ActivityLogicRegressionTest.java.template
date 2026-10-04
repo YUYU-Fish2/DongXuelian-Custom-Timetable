@@ -66,6 +66,28 @@ public final class ActivityLogicRegressionTest {
             failures += run("fall DST week label", () -> check(app.weekRangeLabel(2).equals("第2周 · 11.2–11.8"),
                     "Fall DST shifts labels to the preceding Sunday: " + app.weekRangeLabel(2)));
             failures += run("current reminder", () -> assertReminder(7, 1, true));
+            failures += run("UI spring DST date", () -> {
+                app.calendarStart = date(2026, Calendar.MARCH, 2);
+                check(app.displayedDateMillis(2, 0) == date(2026, Calendar.MARCH, 9), "Spring UI Monday shifted");
+                check(app.displayedWeekRangeLabel(2).equals("3.9–3.15"), "Spring UI range shifted");
+            });
+            failures += run("UI fall DST date", () -> {
+                app.calendarStart = date(2026, Calendar.OCTOBER, 26);
+                check(app.displayedDateMillis(2, 0) == date(2026, Calendar.NOVEMBER, 2), "Fall UI Monday shifted");
+                check(app.displayedWeekRangeLabel(2).equals("11.2–11.8"), "Fall UI range shifted");
+            });
+            TimeZone.setDefault(TimeZone.getTimeZone("Asia/Shanghai"));
+            failures += run("UI cross-month date", () -> {
+                app.calendarStart = date(2026, Calendar.SEPTEMBER, 28);
+                check(app.displayedDateMillis(1, 6) == date(2026, Calendar.OCTOBER, 4), "Sunday month rollover wrong");
+                check(app.displayedWeekRangeLabel(1).equals("9.28–10.4"), "Cross-month UI range wrong");
+            });
+            failures += run("UI cross-year and final week", () -> {
+                app.calendarStart = date(2026, Calendar.DECEMBER, 28);
+                check(app.displayedDateMillis(1, 6) == date(2027, Calendar.JANUARY, 3), "Year rollover wrong");
+                check(app.displayedWeekRangeLabel(1).equals("12.28–1.3"), "Year range wrong");
+                check(app.displayedDateMillis(17, 6) == date(2027, Calendar.APRIL, 25), "Final week Sunday wrong");
+            });
             failures += run("stale reminder", () -> assertReminder(6, 1, false));
             failures += run("removed course reminder", () -> assertReminder(7, 2, false));
             failures += run("null reminder", () -> {
@@ -101,7 +123,7 @@ public final class ActivityLogicRegressionTest {
             TimeZone.setDefault(original);
         }
         if (failures > 0) throw new AssertionError(failures + " activity regression cases failed");
-        System.out.println("ActivityLogicRegressionTest: all 15 cases passed");
+        System.out.println("ActivityLogicRegressionTest: all 19 cases passed");
     }
 
     private static void assertReminder(long generation, int requestCode, boolean expected) {

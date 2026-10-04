@@ -166,6 +166,16 @@ public final class DeviceValidationRunner extends Instrumentation {
                 check(((android.view.View) field(activity, "statusChip")).performClick(), "Preview not clickable");
                 check((int) field(activity, "viewingWeek") == 0, "Preview click did not return to current week");
             }));
+            test("header-cross-month", () -> onMain(() -> checkDateHeader("Asia/Shanghai", 2026, 8, 28, 1, 6, "10月4日", "9.28–10.4")));
+            test("header-cross-year", () -> onMain(() -> checkDateHeader("Asia/Shanghai", 2026, 11, 28, 1, 6, "1月3日", "12.28–1.3")));
+            test("header-spring-DST", () -> onMain(() -> checkDateHeader("America/New_York", 2026, 2, 2, 2, 0, "3月9日", "3.9–3.15")));
+            test("header-fall-DST", () -> onMain(() -> checkDateHeader("America/New_York", 2026, 9, 26, 2, 0, "11月2日", "11.2–11.8")));
+            test("header-semester-statuses", () -> onMain(() -> {
+                checkStatusCard(6);
+                check(((android.widget.TextView) field(activity, "summaryText")).getText().toString().startsWith("未开学 · "), "Before-semester heading lost");
+                checkStatusCard(7);
+                check(((android.widget.TextView) field(activity, "summaryText")).getText().toString().startsWith("假期 · "), "Vacation heading lost");
+            }));
         } catch (Throwable error) { failed++; report.append("FATAL ").append(error).append('\n'); }
         finally {
             try { if (isolatedTarget) {
@@ -184,6 +194,25 @@ public final class DeviceValidationRunner extends Instrumentation {
         int before = skipped;
         try { body.run(); if (skipped == before) { passed++; report.append("PASS ").append(name).append('\n'); } }
         catch (Throwable error) { failed++; report.append("FAIL ").append(name).append(": ").append(error).append('\n'); }
+    }
+    private void checkDateHeader(String zone, int year, int month, int dayOfMonth,
+            int week, int day, String expectedDate, String expectedRange) throws Exception {
+        TimeZone original = TimeZone.getDefault();
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone(zone));
+            Calendar start = Calendar.getInstance();
+            start.set(year, month, dayOfMonth, 0, 0, 0); start.set(Calendar.MILLISECOND, 0);
+            Calendar end = (Calendar) start.clone(); end.add(Calendar.WEEK_OF_YEAR, 17);
+            check(prefs().edit().putLong("calendar_start_millis", start.getTimeInMillis())
+                    .putLong("calendar_end_millis", end.getTimeInMillis()).commit(), "Date fixture failed");
+            courses().clear(); set(activity, "selectedDay", day); set(activity, "viewingWeek", week);
+            call("render");
+            String[] days = {"周一", "周二", "周三", "周四", "周五", "周六", "周日"};
+            check(((android.widget.TextView) field(activity, "summaryText")).getText().toString()
+                    .equals("第" + week + "周 · " + days[day] + " · " + expectedDate), "Wrong date heading");
+            check(((android.widget.TextView) field(activity, "weekRangeText")).getText().toString()
+                    .equals(expectedRange), "Wrong displayed week range");
+        } finally { TimeZone.setDefault(original); }
     }
     private void checkStatusCard(int state) throws Exception {
         Calendar today = Calendar.getInstance();
