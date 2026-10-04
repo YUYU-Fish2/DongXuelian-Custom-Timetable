@@ -1,18 +1,4 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <!-- 人像：头 + 肩，与 ic_location 同为 1.8 线宽的线性风格 -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FF000000"
-        android:strokeWidth="1.8"
-        android:pathData="M12,4.4 C9.9,4.4 8.2,6.1 8.2,8.2 C8.2,10.3 9.9,12 12,12 C14.1,12 15.8,10.3 15.8,8.2 C15.8,6.1 14.1,4.4 12,4.4 Z" android:strokeLineCap="round" android:strokeLineJoin="round" />
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FF000000"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:pathData="M4.9,20.3 C4.9,16.5 8,14.2 12,14.2 C16,14.2 19.1,16.5 19.1,20.3" android:strokeLineJoin="round" />
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#00000000" android:strokeColor="#FF52617B" android:strokeWidth="1.8" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M15.5,7.5A3.5,3.5 0,1 1,8.5,7.5A3.5,3.5 0,1 1,15.5,7.5" />
+    <path android:fillColor="#00000000" android:strokeColor="#FF52617B" android:strokeWidth="1.8" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M5,20V18.5C5,15.8 7.9,14 12,14C16.1,14 19,15.8 19,18.5V20" />
 </vector>
