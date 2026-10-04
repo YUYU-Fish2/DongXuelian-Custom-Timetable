@@ -826,26 +826,14 @@ public class MainActivity extends AppCompatActivity {
         safeFrame.addView(glow, glowParams);
     }
 
-    /**
-     * 页面装饰（brief §8）：透明度 5%~20%，只贴边缘，不进入文字区，不做成满屏贴纸。
-     * 都加在滚动容器之前，所以课程卡片始终压在它们上面，装饰不会影响任何课程信息。
-     */
+    /** Pale watercolor atmosphere stays beneath content and at the bottom corners. */
     private void addPageDecorations(FrameLayout safeFrame) {
-        // 按反馈"下方左右两边用更大的图案、更融洽"：
-        // 参考图里底部两角是大簇白花+叶子，并且**被屏幕边缘裁切**（不是完整摆进去）。
-        // 所以这里放大到 90~150dp 并给出负 margin，让它们自然出血到画面之外，
-        // 体量感和参考图一致；safeFrame 的 setClipChildren(true) 会在屏幕边缘裁切。
-        addDecoration(safeFrame, R.drawable.deco_star,
-                Gravity.TOP | Gravity.START, 28, 104, 8, 0.64f);
-        // 左下角：雪莲花（主体，向左出血）
-        addDecoration(safeFrame, R.drawable.deco_petal,
-                Gravity.BOTTOM | Gravity.START, 124, 46, -20, 0.72f);
-        // 左下角：叶子（压在雪莲旁，向下出血）
-        addDecoration(safeFrame, R.drawable.deco_leaf,
-                Gravity.BOTTOM | Gravity.START, 96, -14, 60, 0.62f);
-        // 右下角：云（向右下出血）
-        addDecoration(safeFrame, R.drawable.deco_cloud,
-                Gravity.BOTTOM | Gravity.END, 152, -18, -28, 0.66f);
+        addDecoration(safeFrame, R.drawable.deco_flower_corner,
+                Gravity.BOTTOM | Gravity.START, 180, -20, -24, 0.28f);
+        addDecoration(safeFrame, R.drawable.deco_flower_corner,
+                Gravity.BOTTOM | Gravity.END, 148, -24, -22, 0.22f);
+        // Mirror the second corner in layout; the transparent center remains clear.
+        safeFrame.getChildAt(safeFrame.getChildCount() - 1).setScaleX(-1f);
     }
 
     /** 放一个纯装饰小图。四个方向都设 margin，实际由 gravity 决定用哪几个。 */
@@ -855,11 +843,9 @@ public class MainActivity extends AppCompatActivity {
         view.setImageResource(resId);
         view.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         if (isDarkMode) {
-            // 装饰素材本身是极浅的蓝色线稿，压在近黑底上只剩一团没有颜色的灰斑，
-            // 看起来像脏点。深色模式下改用主色染色、并适度提高不透明度，
-            // 让它读起来是"有意的装饰"。
+            // Keep watercolor decoration quiet against a dark page.
             view.setImageTintList(ColorStateList.valueOf(accentColor()));
-            alpha = Math.min(0.55f, alpha * 2.2f);
+            alpha *= 0.65f;
         }
         view.setAlpha(alpha);
         view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);

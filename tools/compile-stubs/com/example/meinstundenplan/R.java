@@ -40,6 +40,7 @@ final class R {
         static final int art_flower_mint = 36;
         static final int art_flower_lavender = 37;
         static final int art_flower_peach = 38;
+        static final int deco_flower_corner = 39;
     }
 
     static final class string {

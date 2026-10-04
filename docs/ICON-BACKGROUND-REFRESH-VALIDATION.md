@@ -7,7 +7,7 @@ User plan: ICON-BACKGROUND-REFRESH-PLAN.md. Continue ui/v2-refresh from 448337c.
 - RB3 accepted: new rounded clock, soft pin, simplified person and rounded calendar vectors; uniform 24 viewport/1.8 stroke. Build, fixed device screenshot/layout audit and host 21 cases passed.
 - RB4 accepted: smaller three dots, standard chevron, outlined slider knobs, centered 2.1 plus and refined sparkle. Build, fixed device screenshot/layout audit and host 21 cases passed.
 - RB5 accepted: file with import arrow, notification bell/check badge, plain reminder bell, outline palette/trash and shared chevron. Settings/edit screenshots inspected; isolated build and host 21 cases passed.
-- RB6 pending: quiet edge/bottom watercolor assets.
+- RB6 accepted: new feathered white-flower/mist-blue leaf corner art, mirrored at bottom edges with 0.28/0.22 alpha. Timeline gutter is clear. Build, fixed device screenshot/layout audit and host 21 cases passed.
 - RB7 pending: 14dp meta, 20dp header glyphs, colors/alpha and final validation.
 
 Business/date/storage/reminder/import rules and 44dp click containers remain unchanged. Screenshots use isolated .validation package, fixed Oct 1 2026 13:59 fixture/preset0. Original app data is retained.
