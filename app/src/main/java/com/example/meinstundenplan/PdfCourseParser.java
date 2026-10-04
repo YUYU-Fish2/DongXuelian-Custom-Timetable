@@ -5,6 +5,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.Charset;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -116,7 +119,9 @@ final class PdfCourseParser {
             if (streamEnd < 0) {
                 break;
             }
-            int contentEnd = trimPdfLineBreak(pdfBytes, contentStart, streamEnd);
+            // Do not trim binary bytes: a zlib checksum may itself end in CR/LF.
+            // InflaterInputStream tolerates the delimiter EOL after the compressed stream.
+            int contentEnd = streamEnd;
             if (contentEnd > contentStart) {
                 byte[] rawStream = Arrays.copyOfRange(pdfBytes, contentStart, contentEnd);
                 byte[] stream = inflateOrRaw(rawStream, maxStreamBytes);
@@ -206,6 +211,21 @@ final class PdfCourseParser {
                     continue;
                 }
                 index = arrayText.nextIndex;
+                continue;
+            }
+
+            if (stream[index] == '<' && index + 1 < stream.length && stream[index + 1] != '<') {
+                PdfLiteral hex = readPdfHexString(stream, index);
+                int afterHex = skipWhitespace(stream, hex.nextIndex);
+                if (afterHex + 1 < stream.length && stream[afterHex] == 'T' && stream[afterHex + 1] == 'j') {
+                    String text = decodePdfText(hex.bytes).trim();
+                    if (!text.isEmpty()) {
+                        textItems.add(new PdfTextItem(currentX, currentY, text));
+                    }
+                    index = afterHex + 2;
+                    continue;
+                }
+                index = hex.nextIndex;
                 continue;
             }
 
@@ -569,6 +589,28 @@ final class PdfCourseParser {
     }
 
     private static String decodePdfText(byte[] bytes) {
+        if (bytes.length >= 2 && bytes[0] == (byte) 0xfe && bytes[1] == (byte) 0xff) {
+            return new String(bytes, 2, bytes.length - 2, StandardCharsets.UTF_16BE);
+        }
+        if (bytes.length >= 2 && bytes[0] == (byte) 0xff && bytes[1] == (byte) 0xfe) {
+            return new String(bytes, 2, bytes.length - 2, StandardCharsets.UTF_16LE);
+        }
+        // Even-length ASCII/UTF-8 can look like readable CJK when decoded as UTF-16.
+        // Prefer valid UTF-8 unless NUL bytes indicate UTF-16 text without a BOM.
+        boolean hasNul = false;
+        for (byte value : bytes) {
+            hasNul |= value == 0;
+        }
+        if (!hasNul) {
+            try {
+                return StandardCharsets.UTF_8.newDecoder()
+                        .onMalformedInput(CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(CodingErrorAction.REPORT)
+                        .decode(ByteBuffer.wrap(bytes)).toString();
+            } catch (CharacterCodingException ignored) {
+                // The school's PDF exporter also emits UTF-16BE without a BOM.
+            }
+        }
         if (bytes.length >= 2 && bytes.length % 2 == 0) {
             String utf16 = new String(bytes, Charset.forName("UTF-16BE"));
             if (hasReadableText(utf16)) {
@@ -663,14 +705,6 @@ final class PdfCourseParser {
             }
         } else if (cursor < data.length && data[cursor] == '\n') {
             cursor++;
-        }
-        return cursor;
-    }
-
-    private static int trimPdfLineBreak(byte[] data, int start, int end) {
-        int cursor = end;
-        while (cursor > start && (data[cursor - 1] == '\n' || data[cursor - 1] == '\r')) {
-            cursor--;
         }
         return cursor;
     }

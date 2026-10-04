@@ -4,6 +4,7 @@ import java.util.Locale;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -14,7 +15,7 @@ final class TimetableRules {
             "(?<!\\d)(\\d{1,2})(?:\\s*(?:-|~|～|—|–|至|到)\\s*(\\d{1,2}))?\\s*周?"
     );
     private static final Pattern PERIOD_WEEKS_PATTERN = Pattern.compile(
-            "(?:第\\s*|[（(]?)([1-9]\\d?)(?:\\s*(?:-|~|～|—|–|至|到)\\s*([1-9]\\d?))?\\s*节\\s*[）)]?\\s*([^/\\r\\n]*)"
+            "(?<![\\d-])(?:第\\s*|[（(]?)(0|[1-9]\\d*)(?:\\s*(?:-|~|～|—|–|至|到)\\s*(0|[1-9]\\d*))?\\s*节\\s*[）)]?\\s*([^/\\r\\n]*)"
     );
 
     enum TemporalState {
@@ -247,6 +248,20 @@ final class TimetableRules {
         calendar.set(Calendar.SECOND, 0);
         calendar.set(Calendar.MILLISECOND, 0);
         return calendar.getTimeInMillis();
+    }
+
+    /** Civil dates, rather than elapsed hours, determine teaching weeks across DST. */
+    static long daysBetweenDates(long startMillis, long endMillis) {
+        return civilDayNumber(endMillis) - civilDayNumber(startMillis);
+    }
+
+    private static long civilDayNumber(long millis) {
+        Calendar local = Calendar.getInstance();
+        local.setTimeInMillis(millis);
+        Calendar utc = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+        utc.clear();
+        utc.set(local.get(Calendar.YEAR), local.get(Calendar.MONTH), local.get(Calendar.DAY_OF_MONTH));
+        return utc.getTimeInMillis() / (24L * 60L * 60L * 1000L);
     }
 
     static long nextTriggerAfter(long[] triggerTimes, long afterMillis) {
