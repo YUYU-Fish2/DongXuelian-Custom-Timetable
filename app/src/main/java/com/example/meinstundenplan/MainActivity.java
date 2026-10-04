@@ -174,7 +174,7 @@ public class MainActivity extends AppCompatActivity {
      * 首行竖线要从这里起、末行竖线要在这里收，否则线会多出或缺少一截。
      * （时间和圆点同一行，所以只差半个行高。）
      */
-    private static final int TIMELINE_DOT_TOP_DP = 8;
+    private static final int TIMELINE_DOT_TOP_DP = 12;
     private static final int REQUEST_POST_NOTIFICATIONS = 61;
     private static final int LONG_CLASS_REMINDER_MINUTES = 30;
     private static final int SHORT_CLASS_REMINDER_MINUTES = 10;
@@ -1956,7 +1956,7 @@ public class MainActivity extends AppCompatActivity {
 
         // 图标与字号都收到 11：时间轴改成"时间+圆点"同行后 gutter 加宽到 50dp，
         // 详情行必须再紧一档，才能把"锡科503"这类地点完整放下。
-        group.addView(iconView(iconResId, color, 11, dp(4)));
+        group.addView(iconView(iconResId, color, 13, dp(4)));
 
         TextView label = new TextView(this);
         label.setText(text);
@@ -2008,7 +2008,10 @@ public class MainActivity extends AppCompatActivity {
         FrameLayout gutter = new FrameLayout(this);
         // gutter 50dp：时间和圆点要排在同一行（效果图是 "08:00 ●"），比原来纵向堆叠更占宽。
         // 再多就会把卡片里的周次和地点挤成省略号。
-        int gutterWidthDp = compact ? 50 : 58;
+        android.text.TextPaint clockPaint = new android.text.TextPaint();
+        clockPaint.setTextSize(11 * getResources().getDisplayMetrics().scaledDensity);
+        int gutterWidthDp = Math.max(compact ? 54 : 58,
+                (int) Math.ceil(clockPaint.measureText("23:59") / getResources().getDisplayMetrics().density) + 20);
         LinearLayout.LayoutParams gutterParams = new LinearLayout.LayoutParams(
                 dp(gutterWidthDp), ViewGroup.LayoutParams.MATCH_PARENT);
         // 关键：row 有 gapDp 的底部 padding，而 MATCH_PARENT 不含 padding 区——
@@ -2060,7 +2063,7 @@ public class MainActivity extends AppCompatActivity {
 
         TextView clock = new TextView(this);
         clock.setText(clockText(courseStartMinutes(course)));
-        clock.setTextSize(10);
+        clock.setTextSize(11);
         clock.setTypeface(current ? appTypefaceMedium() : appTypeface(Typeface.NORMAL));
         clock.setTextColor(current ? accentColor() : secondaryTextColor());
         clock.setIncludeFontPadding(false);
@@ -2122,25 +2125,25 @@ public class MainActivity extends AppCompatActivity {
         boolean completed = temporalState == TimetableRules.TemporalState.COMPLETED;
         boolean compact = isCompactWidth();
         // 详情拆成两行后卡片变高，下限与进行中卡片的锁定高度同步放宽，避免裁切
-        int minHeightDp = active ? (compact ? 152 : 160) : (compact ? 108 : 116);
+        int minHeightDp = active ? 126 : 100;
         BoundedMaterialCardView shell = new BoundedMaterialCardView(this);
         shell.setMinimumHeight(dp(minHeightDp));
         // 仅进行中卡片锁定最大高度（稳定倒计时/进度动画）；
         // 普通与灰化卡片高度随内容自适应，两行课程名 + 时间胶囊 + 信息行不再被裁切，
         // 系统大字号、竖屏窄屏同样安全。
-        shell.setMaxHeightPx(active ? dp(compact ? 176 : 186) : 0);
+        shell.setMaxHeightPx(0);
         // brief §10：主要卡片统一 16dp 圆角（原来是 24/28，偏"胖"）
         shell.setRadius(dp(RADIUS_CARD));
         shell.setCardElevation(dp(active ? 5 : 1));
         // brief §5 + 效果图：当前课是"浅蓝紫底 + 细蓝描边 + 深色字"。
         // 填充与描边的浓度是照效果图量的：描边必须明显看得出来，否则整屏会糊成一片白。
         shell.setCardBackgroundColor(active
-                ? mixColor(cardColor(), accentColor(), isDarkMode ? 0.38f : 0.24f)
-                : mixColor(cardColor(), course.color, isDarkMode ? 0.26f : 0.20f));
+                ? mixColor(cardColor(), accentColor(), isDarkMode ? 0.38f : 0.10f)
+                : mixColor(cardColor(), course.color, isDarkMode ? 0.26f : 0.10f));
         shell.setStrokeWidth(dp(active ? 2 : 1));
         shell.setStrokeColor(active
                 ? mixColor(cardColor(), accentColor(), isDarkMode ? 0.88f : 0.62f)
-                : mixColor(cardColor(), course.color, isDarkMode ? 0.62f : 0.52f));
+                : mixColor(cardColor(), course.color, isDarkMode ? 0.62f : 0.32f));
         shell.setClipChildren(true);
         shell.setClipToPadding(true);
         shell.setClipToOutline(true);
@@ -2174,10 +2177,10 @@ public class MainActivity extends AppCompatActivity {
         card.setClipChildren(true);
         card.setClipToPadding(true);
         card.setPadding(
-                dp(active ? (compact ? 16 : 20) : (compact ? 14 : 16)),
-                dp(active ? (compact ? 20 : 22) : (compact ? 14 : 16)),
-                dp(active ? (compact ? 16 : 20) : (compact ? 14 : 16)),
-                dp(active ? (compact ? 20 : 22) : (compact ? 14 : 16))
+                dp(12),
+                dp(12),
+                dp(12),
+                dp(12)
         );
         shell.addView(card, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -2189,7 +2192,7 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout badge = new LinearLayout(this);
         badge.setOrientation(LinearLayout.VERTICAL);
         badge.setGravity(Gravity.CENTER);
-        badge.setPadding(dp(compact ? 10 : 12), dp(8), dp(compact ? 10 : 12), dp(8));
+        badge.setPadding(dp(4), dp(10), dp(4), dp(10));
         // 当前课现在是浅底，徽章回到实心课程色（原来半透明白是为了配深色实心底）
         badge.setBackground(buttonBackground(course.color, dp(active ? 20 : 16)));
 
@@ -2234,7 +2237,7 @@ public class MainActivity extends AppCompatActivity {
         labelParams.setMargins(0, dp(2), 0, 0);
         badge.addView(periodLabel, labelParams);
 
-        card.addView(badge, new LinearLayout.LayoutParams(dp(active ? 64 : 56), ViewGroup.LayoutParams.WRAP_CONTENT));
+        card.addView(badge, new LinearLayout.LayoutParams(dp(active ? 56 : 52), ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // 中间课程信息
         LinearLayout info = new LinearLayout(this);
@@ -2247,6 +2250,7 @@ public class MainActivity extends AppCompatActivity {
 
         TextView name = new TextView(this);
         name.setText(course.name);
+        name.setPadding(0, 0, dp(32), 0);
         name.setTextColor(primaryTextColor());
         name.setTextSize(active ? (compact ? 20 : 21) : (compact ? 17 : 18));
         name.setTypeface(appTypefaceSemiBold());
@@ -2295,50 +2299,29 @@ public class MainActivity extends AppCompatActivity {
             info.addView(remaining, remainingParams);
         }
 
-        // 详情拆两行。保留时间轴后横向只剩约 140dp，而三组一行实测需要 168dp
-        // （周次 46 + 地点 56 + 教师 52 + 间距 14），硬排会把三组全部截断：
-        //   第一行：周次 + 地点      第二行：教师
         int detailFg = secondaryTextColor();
-        String weeksText = course.invalidWeeks ? "上课周待修正"
-                : (course.weeks == null ? "" : course.weeks);
-        boolean hasWeeks = !weeksText.isEmpty();
-        boolean hasRoom = course.room != null && !course.room.isEmpty();
-        boolean hasTeacher = course.teacher != null && !course.teacher.isEmpty();
-
-        if (hasWeeks || hasRoom) {
-            LinearLayout detailLine1 = new LinearLayout(this);
-            detailLine1.setOrientation(LinearLayout.HORIZONTAL);
-            detailLine1.setGravity(Gravity.CENTER_VERTICAL);
-            boolean first = true;
-            if (hasWeeks) {
-                detailLine1.addView(detailGroup(
-                        course.invalidWeeks ? R.drawable.ic_warning : R.drawable.ic_calendar_outline,
-                        weeksText, detailFg, first));
-                first = false;
-            }
-            if (hasRoom) {
-                detailLine1.addView(detailGroup(R.drawable.ic_location, course.room, detailFg, first));
-            }
-            LinearLayout.LayoutParams line1Params = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-            );
-            line1Params.setMargins(0, dp(6), 0, 0);
-            info.addView(detailLine1, line1Params);
+        String weeksText = course.invalidWeeks ? "上课周待修正" : course.weeks;
+        LinearLayout locationRow = new LinearLayout(this);
+        locationRow.setGravity(Gravity.CENTER_VERTICAL);
+        locationRow.addView(detailGroup(R.drawable.ic_location,
+                TextUtils.isEmpty(course.room) ? "地点未填" : course.room, detailFg, true));
+        locationRow.addView(detailGroup(R.drawable.ic_person,
+                TextUtils.isEmpty(course.teacher) ? "教师未填" : course.teacher, detailFg, false));
+        LinearLayout.LayoutParams locationParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        locationParams.topMargin = dp(8);
+        info.addView(locationRow, locationParams);
+        if (!TextUtils.isEmpty(weeksText)) {
+            LinearLayout weeksRow = new LinearLayout(this);
+            weeksRow.addView(detailGroup(course.invalidWeeks ? R.drawable.ic_warning : R.drawable.ic_calendar_outline,
+                    weeksText, detailFg, true));
+            LinearLayout.LayoutParams weeksParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            weeksParams.topMargin = dp(4);
+            info.addView(weeksRow, weeksParams);
         }
-
-        if (hasTeacher) {
-            LinearLayout detailLine2 = new LinearLayout(this);
-            detailLine2.setOrientation(LinearLayout.HORIZONTAL);
-            detailLine2.setGravity(Gravity.CENTER_VERTICAL);
-            detailLine2.addView(detailGroup(R.drawable.ic_person, course.teacher, detailFg, true));
-            LinearLayout.LayoutParams line2Params = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-            );
-            line2Params.setMargins(0, dp(3), 0, 0);
-            info.addView(detailLine2, line2Params);
-        }
+        info.setContentDescription(course.name + "，" + periodRangeTime(course) + "，" + course.room
+                + "，" + course.teacher + "，" + weeksText);
 
         // 右侧编辑按钮：按示意图做成"右上角的小白圆"——更小、贴顶、对比更强。
         ImageButton edit = new ImageButton(this);
@@ -2355,7 +2338,9 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(dp(36), dp(36));
         // 水平 LinearLayout 中 layout_gravity 控制纵向位置：贴顶对齐，和示意图一致
         editParams.gravity = Gravity.TOP;
-        card.addView(edit, editParams);
+        FrameLayout.LayoutParams overlayEditParams = new FrameLayout.LayoutParams(dp(36), dp(36), Gravity.TOP | Gravity.END);
+        overlayEditParams.setMargins(0, dp(8), dp(8), 0);
+        shell.addView(edit, overlayEditParams);
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
