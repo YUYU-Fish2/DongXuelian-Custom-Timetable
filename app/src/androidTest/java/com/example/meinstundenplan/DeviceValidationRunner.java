@@ -26,11 +26,13 @@ public final class DeviceValidationRunner extends Instrumentation {
     private int passed, failed, skipped;
     private final StringBuilder report = new StringBuilder();
     private boolean visualBaseline;
+    private boolean statusMatrix;
     private interface Checked { void run() throws Exception; }
 
     @Override public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
         visualBaseline = arguments != null && "true".equals(arguments.getString("visualBaseline"));
+        statusMatrix = arguments != null && "true".equals(arguments.getString("statusMatrix"));
         start();
     }
 
@@ -146,6 +148,24 @@ public final class DeviceValidationRunner extends Instrumentation {
                 check(ReminderScheduler.status(context).submissionOk, "Alarm submission failed");
                 waitForNotification(manager, 9182);
             });
+            for (int state = 0; state < 8; state++) {
+                final int scenario = state;
+                test("status-card-" + (char) ('A' + state), () -> onMain(() -> checkStatusCard(scenario)));
+            }
+            test("status-card-ended-without-future", () -> onMain(() -> {
+                checkStatusCard(3);
+                set(courses().get(0), "weeks", "1周");
+                call("render");
+                check(((android.widget.TextView) field(activity, "statusChipLabel")).getText().toString()
+                        .equals("今日课程已结束"), "Ended status lost");
+                check(((android.widget.TextView) field(activity, "statusChipName")).getText().length() == 0,
+                        "Old future course retained");
+            }));
+            test("status-card-preview-return", () -> onMain(() -> {
+                checkStatusCard(5);
+                check(((android.view.View) field(activity, "statusChip")).performClick(), "Preview not clickable");
+                check((int) field(activity, "viewingWeek") == 0, "Preview click did not return to current week");
+            }));
         } catch (Throwable error) { failed++; report.append("FATAL ").append(error).append('\n'); }
         finally {
             try { if (isolatedTarget) {
@@ -164,6 +184,52 @@ public final class DeviceValidationRunner extends Instrumentation {
         int before = skipped;
         try { body.run(); if (skipped == before) { passed++; report.append("PASS ").append(name).append('\n'); } }
         catch (Throwable error) { failed++; report.append("FAIL ").append(name).append(": ").append(error).append('\n'); }
+    }
+    private void checkStatusCard(int state) throws Exception {
+        Calendar today = Calendar.getInstance();
+        today.set(Calendar.HOUR_OF_DAY, 0); today.set(Calendar.MINUTE, 0);
+        today.set(Calendar.SECOND, 0); today.set(Calendar.MILLISECOND, 0);
+        int day = (int) call("currentSchoolDay");
+        Calendar start = (Calendar) today.clone(); start.add(Calendar.DAY_OF_YEAR, -day);
+        Calendar end = (Calendar) start.clone(); end.add(Calendar.WEEK_OF_YEAR, 17);
+        if (state == 6) { start.add(Calendar.WEEK_OF_YEAR, 1); end.add(Calendar.WEEK_OF_YEAR, 1); }
+        if (state == 7) { start.add(Calendar.WEEK_OF_YEAR, -20); end.add(Calendar.WEEK_OF_YEAR, -20); }
+        prefs().edit().putLong("calendar_start_millis", start.getTimeInMillis())
+                .putLong("calendar_end_millis", end.getTimeInMillis()).commit();
+        courses().clear(); set(activity, "viewingWeek", state == 5 ? 8 : 0);
+        int now = (int) call("currentMinutes");
+        Object item = course(301, "状态测试课程", "1-17周", 3, 4);
+        set(item, "day", day); set(item, "room", "锡科503"); set(item, "teacher", "罗志坚");
+        set(item, "customStartMinutes", Math.max(0, now - 30));
+        set(item, "customEndMinutes", Math.min(1439, now + 38));
+        if (state == 1 || state == 2 || state == 6) {
+            int nextMinutes = state == 1 ? Math.min(1439, now + 31) : 600;
+            set(item, "customStartMinutes", nextMinutes);
+            set(item, "customEndMinutes", Math.min(1439, nextMinutes + 100));
+        }
+        if (state == 3) {
+            set(item, "customStartMinutes", Math.max(0, now - 100));
+            set(item, "customEndMinutes", Math.max(0, now - 1));
+            courses().add(item);
+        }
+        // Exercise the complete render -> existing course lookup -> presentation chain.
+        if (state == 2) set(item, "weeks", "2周");
+        if (state != 3 && state != 4) courses().add(item);
+        set(activity, "selectedDay", day);
+        call("render");
+        String[] labels = {"正在上课", "下一节", "下一节 · ", "今日课程已结束", "暂无后续课程", "预览第 8 周", "未开学", "本学期已结束"};
+        android.widget.TextView label = (android.widget.TextView) field(activity, "statusChipLabel");
+        check(label.getText().toString().startsWith(labels[state]), "Wrong status: " + label.getText());
+        android.widget.TextView countdown = (android.widget.TextView) field(activity, "statusChipCountdown");
+        check((countdown.getVisibility() == android.view.View.VISIBLE) == (state <= 1), "Countdown visibility wrong");
+        if (state == 0) check(countdown.getText().toString().contains("剩余"), "Remaining label absent");
+        if (state == 1) check(countdown.getText().toString().endsWith("min 后"), "Next countdown absent");
+        android.widget.TextView name = (android.widget.TextView) field(activity, "statusChipName");
+        boolean detail = state == 0 || state == 1 || state == 2 || state == 3 || state == 6;
+        check((name.getVisibility() == android.view.View.VISIBLE) == detail, "Stale course detail");
+        if (!detail) check(name.getText().length() == 0, "Hidden stale course name");
+        android.widget.TextView date = (android.widget.TextView) field(activity, "statusChipDate");
+        check((date.getVisibility() == android.view.View.VISIBLE) == (state == 2 || state == 3 || state == 6), "Future date visibility wrong");
     }
     /** Screenshot fixtures are confined to the isolated instrumentation target. */
     private void captureVisualBaseline() throws Exception {
@@ -198,6 +264,14 @@ public final class DeviceValidationRunner extends Instrumentation {
             call("render");
         });
         screenshot("baseline_home.png");
+        if (statusMatrix) {
+            for (int state = 0; state < 8; state++) {
+                final int scenario = state;
+                test("status-card-" + (char) ('A' + state), () -> onMain(() -> checkStatusCard(scenario)));
+                screenshot("status-" + (char) ('A' + state) + ".png");
+            }
+            return;
+        }
         onMain(() -> call("showSettingsDialogV2"));
         screenshot("baseline_settings.png");
         onMain(() -> ((android.view.View) field(activity, "settingsOverlay")).performClick());

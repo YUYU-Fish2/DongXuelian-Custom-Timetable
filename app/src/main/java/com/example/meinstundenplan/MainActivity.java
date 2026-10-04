@@ -247,6 +247,12 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout statusChipMetaRow;
     private android.widget.ImageView statusChipMetaIcon;
     private TextView statusChipMeta;
+    private TextView statusChipCountdown;
+    private TextView statusChipDate;
+    private TextView statusChipRoom;
+    private TextView statusChipTeacher;
+    private TextView statusChipWeeks;
+    private LinearLayout statusChipDetails;
     private View settingsOverlay;
     private int selectedDay = 0;
     private int viewingWeek = 0; // 0=跟随真实当前周；非 0=预览该周
@@ -917,88 +923,71 @@ public class MainActivity extends AppCompatActivity {
         summaryParams.setMargins(0, dp(4), 0, 0);
         titleBlock.addView(summaryText, summaryParams);
 
-        // 「下一节」胶囊（brief §7 三层）：图标 + 标签 / 课程名 / 时间 · 教室。
-        // 视觉权重刻意低于上方标题；compact 下右侧留出角色宽度，避免压到人物。
+        // P2: full-width information card below the Hero, with stable rows in every state.
+        header.setMinimumHeight(dp(HERO_CHARACTER_MAX_HEIGHT_DP));
         statusChip = new LinearLayout(this);
         statusChip.setOrientation(LinearLayout.VERTICAL);
-        statusChip.setPadding(dp(14), dp(10), dp(16), dp(11));
-
-        LinearLayout chipLabelRow = new LinearLayout(this);
-        chipLabelRow.setOrientation(LinearLayout.HORIZONTAL);
-        chipLabelRow.setGravity(Gravity.CENTER_VERTICAL);
-
+        statusChip.setPadding(dp(14), dp(12), dp(14), dp(12));
+        LinearLayout labelRow = new LinearLayout(this);
+        labelRow.setGravity(Gravity.CENTER_VERTICAL);
         statusChipIcon = new android.widget.ImageView(this);
         statusChipIcon.setImageResource(R.drawable.ic_sparkle);
-        statusChipIcon.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         statusChipIcon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LinearLayout.LayoutParams chipIconParams = new LinearLayout.LayoutParams(dp(13), dp(13));
-        chipIconParams.setMargins(0, 0, dp(6), 0);
-        chipLabelRow.addView(statusChipIcon, chipIconParams);
-
-        statusChipLabel = new TextView(this);
-        statusChipLabel.setTextSize(12);
-        statusChipLabel.setTypeface(appTypefaceMedium());
-        statusChipLabel.setIncludeFontPadding(false);
-        statusChipLabel.setSingleLine(true);
-        chipLabelRow.addView(statusChipLabel);
-
-        // 效果图第一行是「图标 下一节 …… 14:30 - 16:10 ›」：
-        // 用一条 weight 撑开中间，把时间和右箭头推到行尾，而不是像原来那样各占一行。
-        View chipSpacer = new View(this);
-        chipLabelRow.addView(chipSpacer, new LinearLayout.LayoutParams(0, 1, 1f));
-
-        statusChipMetaRow = new LinearLayout(this);
-        statusChipMetaRow.setOrientation(LinearLayout.HORIZONTAL);
-        statusChipMetaRow.setGravity(Gravity.CENTER_VERTICAL);
-
-        statusChipMetaIcon = new android.widget.ImageView(this);
-        statusChipMetaIcon.setImageResource(R.drawable.ic_clock_outline);
-        statusChipMetaIcon.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
-        statusChipMetaIcon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LinearLayout.LayoutParams chipMetaIconParams = new LinearLayout.LayoutParams(dp(12), dp(12));
-        chipMetaIconParams.setMargins(0, 0, dp(4), 0);
-        statusChipMetaRow.addView(statusChipMetaIcon, chipMetaIconParams);
-
-        statusChipMeta = new TextView(this);
-        statusChipMeta.setTextSize(12);
-        statusChipMeta.setTypeface(appTypefaceMedium());
-        statusChipMeta.setIncludeFontPadding(false);
-        statusChipMeta.setSingleLine(true);
-        statusChipMeta.setEllipsize(TextUtils.TruncateAt.END);
-        statusChipMetaRow.addView(statusChipMeta);
-        chipLabelRow.addView(statusChipMetaRow);
-
-        android.widget.ImageView chipChevron = new android.widget.ImageView(this);
-        chipChevron.setImageResource(R.drawable.ic_pointer);
-        chipChevron.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
-        chipChevron.setImageTintList(ColorStateList.valueOf(secondaryTextColor()));
-        chipChevron.setAlpha(0.7f);
-        chipChevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LinearLayout.LayoutParams chipChevronParams = new LinearLayout.LayoutParams(dp(9), dp(9));
-        chipChevronParams.setMargins(dp(6), 0, 0, 0);
-        chipLabelRow.addView(chipChevron, chipChevronParams);
-
-        statusChip.addView(chipLabelRow);
-
-        statusChipName = new TextView(this);
-        statusChipName.setTextSize(compact ? 15 : 16);
-        statusChipName.setTypeface(appTypefaceSemiBold());
-        statusChipName.setIncludeFontPadding(false);
-        statusChipName.setSingleLine(true);
-        statusChipName.setEllipsize(TextUtils.TruncateAt.END);
-        LinearLayout.LayoutParams chipNameParams = new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams sparkleParams = new LinearLayout.LayoutParams(dp(14), dp(14));
+        sparkleParams.rightMargin = dp(6);
+        labelRow.addView(statusChipIcon, sparkleParams);
+        statusChipLabel = statusChipText(12, false);
+        labelRow.addView(statusChipLabel, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        statusChipCountdown = statusChipText(12, false);
+        LinearLayout.LayoutParams countdownParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        countdownParams.leftMargin = dp(8);
+        labelRow.addView(statusChipCountdown, countdownParams);
+        android.widget.ImageView chevron = new android.widget.ImageView(this);
+        chevron.setImageResource(R.drawable.ic_chevron_right);
+        chevron.setImageTintList(ColorStateList.valueOf(secondaryTextColor()));
+        chevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams chevronParams = new LinearLayout.LayoutParams(dp(16), dp(16));
+        chevronParams.leftMargin = dp(4);
+        labelRow.addView(chevron, chevronParams);
+        statusChip.addView(labelRow);
+        statusChipDate = statusChipText(12, false);
+        LinearLayout.LayoutParams dateParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        chipNameParams.setMargins(0, dp(5), 0, 0);
-        statusChip.addView(statusChipName, chipNameParams);
-
-        int chipRightReserve = SHOW_HERO_CHARACTER && compact
-                ? Math.max(0, heroReservedWidthDp(true) - sideMargin) : 0;
-        LinearLayout.LayoutParams chipParams = new LinearLayout.LayoutParams(
-                compact ? ViewGroup.LayoutParams.MATCH_PARENT : ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        chipParams.setMargins(0, dp(10), dp(chipRightReserve), 0);
-        titleBlock.addView(statusChip, chipParams);
+        dateParams.topMargin = dp(6);
+        statusChip.addView(statusChipDate, dateParams);
+        statusChipName = statusChipText(compact ? 18 : 19, true);
+        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        nameParams.topMargin = dp(7);
+        statusChip.addView(statusChipName, nameParams);
+        statusChipDetails = new LinearLayout(this);
+        statusChipDetails.setOrientation(LinearLayout.VERTICAL);
+        statusChipMetaRow = new LinearLayout(this);
+        statusChipMetaRow.setGravity(Gravity.CENTER_VERTICAL);
+        statusChipMeta = statusChipText(12, false);
+        statusChipRoom = statusChipText(12, false);
+        statusChipMetaRow.addView(statusChipDetail(R.drawable.ic_clock_outline, statusChipMeta),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.15f));
+        statusChipMetaRow.addView(statusChipDetail(R.drawable.ic_location, statusChipRoom),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        statusChipDetails.addView(statusChipMetaRow);
+        LinearLayout secondaryRow = new LinearLayout(this);
+        secondaryRow.setGravity(Gravity.CENTER_VERTICAL);
+        statusChipTeacher = statusChipText(11, false);
+        statusChipWeeks = statusChipText(11, false);
+        secondaryRow.addView(statusChipDetail(R.drawable.ic_person, statusChipTeacher),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.85f));
+        secondaryRow.addView(statusChipDetail(R.drawable.ic_calendar_outline, statusChipWeeks),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.3f));
+        LinearLayout.LayoutParams secondaryParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        secondaryParams.topMargin = dp(6);
+        statusChipDetails.addView(secondaryRow, secondaryParams);
+        LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        detailParams.topMargin = dp(7);
+        statusChip.addView(statusChipDetails, detailParams);
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
@@ -1007,7 +996,7 @@ public class MainActivity extends AppCompatActivity {
                 ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                 : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         if (compact) {
-            actionsParams.setMargins(0, dp(12), 0, 0);
+            actionsParams.setMargins(0, dp(76), 0, 0);
         }
         header.addView(actions, actionsParams);
 
@@ -1037,6 +1026,11 @@ public class MainActivity extends AppCompatActivity {
         addButton.setPadding(dp(11), dp(11), dp(11), dp(11));
         addButton.setOnClickListener(view -> showCourseDialog(null));
         actions.addView(addButton, new LinearLayout.LayoutParams(dp(actionButtonSize), dp(actionButtonSize)));
+
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        statusParams.setMargins(dp(sideMargin), dp(8), dp(sideMargin), 0);
+        root.addView(statusChip, statusParams);
 
         // 周切换导航条：‹ 第N周·日期范围 › [回到本周]
         weekNavRow = new LinearLayout(this);
@@ -1194,73 +1188,108 @@ public class MainActivity extends AppCompatActivity {
         renderedTemporalSignature = temporalSignature();
     }
 
-    /**
-     * 「下一节」胶囊：三态（正在上课 / 下一节 / 暂无后续课程）+ 预览态。
-     *
-     * 四态共用同一版式，只换文案与配色浓淡，保证看起来始终是同一个组件。
-     * 数据完全来自 currentCourseInProgress() / nextUpcomingCourseFromToday()，不新增业务逻辑。
-     */
-    private void updateStatusChip(Course current, SummaryCourse next, boolean previewMode) {
-        if (statusChip == null) {
-            return;
-        }
-        Course shown = current != null ? current : (next != null ? next.course : null);
-        boolean ongoing = current != null;
-        boolean hasCourse = shown != null;
+    private TextView statusChipText(int size, boolean prominent) {
+        TextView text = new TextView(this);
+        text.setTextSize(size);
+        text.setTypeface(prominent ? appTypefaceSemiBold() : appTypefaceMedium());
+        text.setIncludeFontPadding(false);
+        text.setSingleLine(true);
+        text.setEllipsize(TextUtils.TruncateAt.END);
+        return text;
+    }
 
+    private LinearLayout statusChipDetail(int resource, TextView text) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, 0, dp(6), 0);
+        android.widget.ImageView icon = new android.widget.ImageView(this);
+        icon.setImageResource(resource);
+        icon.setImageTintList(ColorStateList.valueOf(secondaryTextColor()));
+        icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(13), dp(13));
+        iconParams.rightMargin = dp(5);
+        row.addView(icon, iconParams);
+        row.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        return row;
+    }
+
+    /** Presentation only: existing course lookup and date rules remain authoritative. */
+    private void updateStatusChip(Course current, SummaryCourse next, boolean previewMode) {
+        if (statusChip == null) return;
+        long today = startOfTodayMillis();
+        boolean beforeSemester = today < calendarStartMillis();
+        boolean afterSemester = today > startOfDayMillis(calendarEndMillis());
+        Course shown = current != null ? current : (next != null ? next.course : null);
+        boolean ongoing = !previewMode && !beforeSemester && !afterSemester && current != null;
+        boolean nextToday = next != null && startOfDayMillis(next.startAtMillis) == today;
         String label;
+        String countdown = "";
         if (previewMode) {
-            label = "预览模式";
+            label = "预览第 " + viewingWeek + " 周";
+            shown = null;
+        } else if (beforeSemester) {
+            label = "未开学";
+            shown = next != null ? next.course : null;
+        } else if (afterSemester) {
+            label = "本学期已结束";
+            shown = null;
         } else if (ongoing) {
             label = "正在上课";
-        } else if (hasCourse) {
-            // 不是今天的课就把星期带在标签上，否则只看时间会误以为是今天
-            label = next != null && next.day != currentSchoolDay()
-                    ? "下一节 · " + DAYS[next.day]
-                    : "下一节";
+            int minutes = Math.max(0, (courseEndSeconds(current) - currentSeconds() + 59) / 60);
+            countdown = "剩余 " + minutes + " min";
+        } else if (nextToday) {
+            label = "下一节";
+            long minutes = Math.max(1, (next.startAtMillis - System.currentTimeMillis() + 59999) / 60000);
+            countdown = minutes + " min 后";
         } else {
-            label = "暂无后续课程";
+            boolean hadToday = false;
+            boolean allEnded = true;
+            for (Course course : courses) {
+                if (course.day == currentSchoolDay()
+                        && courseTemporalState(course) != TimetableRules.TemporalState.UNAVAILABLE) {
+                    hadToday = true;
+                    if (courseTemporalState(course) != TimetableRules.TemporalState.COMPLETED) allEnded = false;
+                }
+            }
+            if (hadToday && allEnded) label = "今日课程已结束";
+            else if (next != null) label = "下一节 · " + DAYS[next.day];
+            else label = "暂无后续课程";
         }
+        boolean detail = shown != null;
         statusChipLabel.setText(label);
-
-        boolean showDetail = hasCourse && !previewMode;
-        if (showDetail) {
-            statusChipName.setText(shown.name);
-            // 效果图第一行是「下一节 …… 14:30 - 16:10 ›」：只放时间范围。
-            // 原来还塞了教室，结果这一行被截成「当前:...」，箭头也被挤没了。
-            statusChipMeta.setText(periodRangeTime(shown));
-            statusChipName.setVisibility(View.VISIBLE);
-            statusChipMetaRow.setVisibility(View.VISIBLE);
-        } else {
-            statusChipName.setVisibility(View.GONE);
-            statusChipMetaRow.setVisibility(View.GONE);
-        }
-
-        // 配色：预览/正在上课最重，普通「下一节」更淡，「暂无」整体弱化成灰
-        int tint;
-        float amount;
-        if (previewMode || ongoing) {
-            tint = accentColor();
-            amount = isDarkMode ? 0.30f : 0.13f;
-        } else if (hasCourse) {
-            tint = accentColor();
-            amount = isDarkMode ? 0.20f : 0.06f;
-        } else {
-            tint = secondaryTextColor();
-            amount = isDarkMode ? 0.16f : 0.05f;
-        }
+        statusChipCountdown.setText(countdown);
+        statusChipCountdown.setVisibility(countdown.isEmpty() ? View.GONE : View.VISIBLE);
+        boolean futureDate = detail && !ongoing && next != null && !nextToday;
+        statusChipDate.setText(futureDate ? (beforeSemester ? "首课 · " : "下一节 · ")
+                + formatDate(next.startAtMillis) + " · " + DAYS[next.day] : "");
+        statusChipDate.setVisibility(futureDate ? View.VISIBLE : View.GONE);
+        statusChipName.setText(detail ? shown.name : "");
+        statusChipMeta.setText(detail ? periodRangeTime(shown) : "");
+        statusChipRoom.setText(detail ? (TextUtils.isEmpty(shown.room) ? "地点未填" : shown.room) : "");
+        statusChipTeacher.setText(detail ? (TextUtils.isEmpty(shown.teacher) ? "教师未填" : shown.teacher) : "");
+        String weekDetail = detail ? shown.weeks + " · " + shown.periodLabel() : "";
+        statusChipWeeks.setText(weekDetail);
+        statusChipName.setVisibility(detail ? View.VISIBLE : View.GONE);
+        statusChipDetails.setVisibility(detail ? View.VISIBLE : View.GONE);
+        statusChipMetaRow.setVisibility(detail ? View.VISIBLE : View.GONE);
+        int tint = ongoing || detail || previewMode ? accentColor() : secondaryTextColor();
+        float amount = ongoing || previewMode ? 0.10f : 0.04f;
         statusChip.setBackground(verticalGradientBackground(
                 mixColor(cardColor(), tint, amount),
-                mixColor(cardColor(), tint, Math.min(0.9f, amount * 2.4f)),
-                dp(18)));
-
-        int labelColor = hasCourse ? accentColor() : secondaryTextColor();
-        statusChipLabel.setTextColor(labelColor);
-        statusChipIcon.setImageTintList(ColorStateList.valueOf(labelColor));
-        statusChipName.setTextColor(ongoing ? accentColor() : primaryTextColor());
-        int metaColor = ongoing ? accentColor() : secondaryTextColor();
-        statusChipMeta.setTextColor(metaColor);
-        statusChipMetaIcon.setImageTintList(ColorStateList.valueOf(metaColor));
+                mixColor(cardColor(), tint, amount * 1.6f), dp(18)));
+        statusChipLabel.setTextColor(tint);
+        statusChipIcon.setImageTintList(ColorStateList.valueOf(tint));
+        statusChipCountdown.setTextColor(accentColor());
+        statusChipName.setTextColor(primaryTextColor());
+        statusChipMeta.setTextColor(secondaryTextColor());
+        statusChipRoom.setTextColor(secondaryTextColor());
+        statusChipTeacher.setTextColor(secondaryTextColor());
+        statusChipWeeks.setTextColor(secondaryTextColor());
+        statusChipDate.setTextColor(secondaryTextColor());
+        statusChip.setContentDescription(label + (countdown.isEmpty() ? "" : "，" + countdown)
+                + (detail ? "，" + shown.name + "，" + statusChipMeta.getText() + "，" + statusChipRoom.getText()
+                    + "，" + statusChipTeacher.getText() + "，" + statusChipDate.getText() + "，" + weekDetail : "")
+                + (previewMode ? "，点击返回本周" : ""));
         statusChip.setOnClickListener(previewMode ? view -> returnToCurrentWeek() : null);
     }
 
@@ -1432,6 +1461,11 @@ public class MainActivity extends AppCompatActivity {
         if (!TextUtils.equals(renderedTemporalSignature, currentSignature)) {
             render();
             return;
+        }
+        if (viewingWeek != 0) updateStatusChip(null, null, true);
+        else {
+            Course current = currentCourseInProgress();
+            updateStatusChip(current, current == null ? nextUpcomingCourseFromToday() : null, false);
         }
         invalidateCourseProgressViews(courseList);
     }
