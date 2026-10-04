@@ -5,7 +5,7 @@
 - 主色：沿用 accent preset；背景浅蓝/白，正文 primaryTextColor，辅助 secondaryTextColor。
 - 卡片：16dp 圆角；信息优先于水彩插画；普通/已结束插画独立透明度，经 P6 固定场景比较选定。
 - 元信息：至少 11sp；地点与教师优先，周次可以换行；长地点/教师单行 END ellipsize，完整值保留在无障碍说明。
-- 图标：24×24 viewport，工具类 1.8 线宽、round cap/join；加号 2.1。Meta 13dp、头部 20dp、Chevron 16dp。
+- 图标：24×24 viewport，工具类 1.8 线宽、round cap/join；加号 2.1。Meta 14dp、头部 20dp、Chevron 16dp。
 - 点击区域：至少 44×44dp 外层容器，视觉按钮设置 38dp/添加42dp；装饰不进入无障碍焦点。
 - 日期：统一 displayedDateMillis(week,day) 委托原 courseDateMillisForWeek(day,week)。禁止固定 24h 毫秒偏移。
 - 星期栏：七天横滑；日期 12sp；高度 WRAP_CONTENT，最小64/68dp；今天由实际日期判定。
@@ -25,9 +25,9 @@
 | 日期标题 / 下一节课程名 / 最小辅助文字 | 18sp bold / 20sp / 11sp |
 | 倒计时数字 | 基础文字2倍、bold |
 | 设置 / 添加 / 更多视觉尺寸 | 38 /42 /36dp |
-| 最小点击容器 / 元信息图标 | 44dp /13dp |
+| 最小点击容器 / 元信息图标 | 44dp /14dp |
 | 卡片 / 日期选中圆角 / 轻阴影 | 16 /20 /2dp |
-| 普通 / 已结束 / 下一节插画 Alpha | 0.45 /0.30 /0.12 |
+| 普通 / 已结束 / 下一节插画 Alpha | 0.58 /0.40 /0.32 |
 | 星期条下间距 / 列表上padding | 8dp /4dp |
 | 普通行间距 / 课间标记留白 | 12dp /28dp |
 
@@ -36,3 +36,14 @@
 七个显示日期都只调用 displayedDateMillis。范围取七日的最小/最大值，兼容非周一开学，不另建教学周算法。时间线的课中使用有效卡片锚点，课间使用相邻卡片实际边界保证文字留白；布局后的 pre-draw 计算避免同高度重新渲染不更新。无效或非时间顺序的列表隐藏比例线，不改变课程列表排序。
 
 100% 目标排版完整；115% 无文本裁切；130% 允许页面滚动、辅助换行或地点/教师按规定省略，完整内容在无障碍说明中。354/360/393/411dp 均以同一RMX3700调整密度验证，这不代表四种不同硬件的认证。对比度记录覆盖冻结的 preset 0 平面颜色，水彩与系统栏另以真机截图检查。
+
+## Icon / background refresh
+
+- New watercolor window Hero; flowers/books illustrations selected from mint, peach and lavender by existing card color. No persisted color or course data changes.
+- Meta icons 14dp, header glyphs 20dp, settings glyphs 20dp, chevrons 16dp; FIT_CENTER renders vectors within their actual bounds. Button containers remain at least 44dp.
+- Meta icon tint blends auxiliary text 22% toward primary text; runtime accent, white plus and destructive red retain their semantics.
+- Rounded 24 viewport vectors use 1.8 strokes; plus uses 2.1. More and sparkle use small filled geometry.
+- Normal/completed/next art alpha: 0.58/0.40/0.32. Bottom corner watercolor: 0.36 left, 0.30 right; dark mode multiplies by 0.65 and tints to the accent.
+- Date heading and week-range layout remain as approved; verify eyes/face visibility, clear gutter and text contrast on screenshots.
+
+Course time pills wrap the clock and full time range with 7/9dp horizontal padding; light background uses 5% accent tint.

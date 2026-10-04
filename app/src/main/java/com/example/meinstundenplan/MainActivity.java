@@ -113,22 +113,21 @@ public class MainActivity extends AppCompatActivity {
     private static final float HERO_TARGET_HEIGHT_RATIO = 0.19f;
     // Initial visual scale; validate cropping within the approved 1.18–1.26 range.
     private static final float HERO_SCENE_SCALE = 1.22f;
-    // 课程卡片右下角小插画的透明度。
-    // 按反馈"要像 Hero 一样凸显"，已提到接近满不透明；素材端也把饱和/对比拉了一档。
-    // 插画绘制在文字下层，且位于右下角，长文本省略时也不会盖住可读内容。
+    // Flowers/books remain subordinate to course text; completed art is quieter.
     // UI v2 shared tokens; dimensions in dp, text in sp.
     private static final int TOUCH_TARGET_DP = 44;
     private static final int SETTINGS_VISUAL_DP = 38;
     private static final int ADD_VISUAL_DP = 42;
     private static final int MORE_VISUAL_DP = 36;
-    private static final int META_ICON_DP = 13;
+    private static final int META_ICON_DP = 14;
+    private static final int HEADER_ICON_DP = 20;
     private static final int HEADER_TEXT_SP = 18;
     private static final int AUX_TEXT_SP = 11;
     private static final int NEXT_NAME_SP = 20;
     private static final float COUNTDOWN_NUMBER_SCALE = 2f;
-    private static final float NEXT_ART_ALPHA = 0.12f;
-    private static final float COURSE_ART_ALPHA_NORMAL = 0.45f;
-    private static final float COURSE_ART_ALPHA_COMPLETED = 0.30f;
+    private static final float NEXT_ART_ALPHA = 0.32f;
+    private static final float COURSE_ART_ALPHA_NORMAL = 0.58f;
+    private static final float COURSE_ART_ALPHA_COMPLETED = 0.40f;
     // Instrumentation-only overrides; ignored outside the isolated debug validation package.
     private long uiValidationNowMillis;
     private float uiValidationArtAlpha = -1f;
@@ -769,13 +768,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * Hero 氛围层：极淡的云 / 飘落花瓣 / 植物底图 + 角色背后的柔光晕（brief §3）。
-     *
-     * 底图**不做抠图**——云本身就是白的，与白底无法区分，键控会把云一起吃掉。
-     * 改为保留白底、整体压到 22%：白色叠在 #F5F8FD 页面上只差约 2/255（看不出边界），
-     * 而云和花瓣会作为很淡的纹理透出来。素材四周已做羽化，不会出现矩形硬边。
-     */
+    /** One feathered watercolor window scene with a clear date area and right-side character. */
     private void addHeroScene(FrameLayout safeFrame, boolean compact) {
         float density = getResources().getDisplayMetrics().density;
         int screenHeightDp = Math.round(getResources().getDisplayMetrics().heightPixels / density);
@@ -829,15 +822,13 @@ public class MainActivity extends AppCompatActivity {
     /** Pale watercolor atmosphere stays beneath content and at the bottom corners. */
     private void addPageDecorations(FrameLayout safeFrame) {
         addDecoration(safeFrame, R.drawable.deco_flower_corner,
-                Gravity.BOTTOM | Gravity.START, 180, -20, -24, 0.28f);
+                Gravity.BOTTOM | Gravity.START, 180, -20, -24, 0.36f);
         addDecoration(safeFrame, R.drawable.deco_flower_corner,
-                Gravity.BOTTOM | Gravity.END, 148, -24, -22, 0.22f);
-        // Mirror the second corner in layout; the transparent center remains clear.
-        safeFrame.getChildAt(safeFrame.getChildCount() - 1).setScaleX(-1f);
+                Gravity.BOTTOM | Gravity.END, 148, -24, -22, 0.30f).setScaleX(-1f);
     }
 
     /** 放一个纯装饰小图。四个方向都设 margin，实际由 gravity 决定用哪几个。 */
-    private void addDecoration(FrameLayout parent, int resId, int gravity,
+    private android.widget.ImageView addDecoration(FrameLayout parent, int resId, int gravity,
                                int sizeDp, int verticalMarginDp, int horizontalMarginDp, float alpha) {
         android.widget.ImageView view = new android.widget.ImageView(this);
         view.setImageResource(resId);
@@ -855,6 +846,7 @@ public class MainActivity extends AppCompatActivity {
         params.leftMargin = dp(horizontalMarginDp);
         params.rightMargin = dp(horizontalMarginDp);
         parent.addView(view, params);
+        return view;
     }
 
     private void buildLayout() {
@@ -1011,11 +1003,12 @@ public class MainActivity extends AppCompatActivity {
         ImageButton settingsButton = new ImageButton(this);
         settingsButton.setImageResource(R.drawable.ic_settings_outline);
         settingsButton.setImageTintList(ColorStateList.valueOf(accentColor()));
-        settingsButton.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+        settingsButton.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         settingsButton.setContentDescription("\u8bbe\u7f6e");
         settingsButton.setBackground(elevatedCardBackground(cardColor(), dp(ACTION_BUTTON_SIZE_DP / 2)));
         settingsButton.setElevation(dp(ELEVATION_SOFT));
-        settingsButton.setPadding(dp(7), dp(7), dp(7), dp(7));
+        int settingsIconPadding = dp((SETTINGS_VISUAL_DP - HEADER_ICON_DP) / 2);
+        settingsButton.setPadding(settingsIconPadding, settingsIconPadding, settingsIconPadding, settingsIconPadding);
         settingsButton.setOnClickListener(view -> showSettingsDialogV2());
         LinearLayout.LayoutParams settingsParams = new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP));
         settingsParams.setMargins(0, 0, dp(10), 0);
@@ -1024,7 +1017,7 @@ public class MainActivity extends AppCompatActivity {
         ImageButton addButton = new ImageButton(this);
         addButton.setImageResource(R.drawable.ic_plus);
         addButton.setImageTintList(ColorStateList.valueOf(Color.WHITE));
-        addButton.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+        addButton.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         addButton.setContentDescription("\u6dfb\u52a0\u8bfe\u7a0b");
         // 「＋」保持主色实心（示意图里它是唯一的实心钮，承担"主操作"）
         addButton.setBackground(interactiveButtonBackground(accentColor(), dp(ACTION_BUTTON_SIZE_DP / 2)));
@@ -1062,12 +1055,12 @@ public class MainActivity extends AppCompatActivity {
         weekPrevButton.setImageResource(R.drawable.ic_chevron_right);
         weekPrevButton.setRotation(180f);
         weekPrevButton.setImageTintList(ColorStateList.valueOf(accentColor()));
-        weekPrevButton.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+        weekPrevButton.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         weekPrevButton.setContentDescription("上一周");
         // brief §5：箭头做成"白底 + 细描边 + 轻阴影"的小圆角块
         weekPrevButton.setBackground(elevatedCardBackground(cardColor(), dp(14)));
         weekPrevButton.setElevation(dp(ELEVATION_SOFT));
-        weekPrevButton.setPadding(dp(9), dp(9), dp(9), dp(9));
+        weekPrevButton.setPadding(dp(8), dp(8), dp(8), dp(8));
         weekPrevButton.setOnClickListener(view -> { if (weekPickerDialog != null) weekPickerDialog.dismiss(); stepViewingWeek(-1); });
         LinearLayout.LayoutParams weekPrevParams = new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP));
         weekPrevParams.setMargins(0, 0, dp(4), 0);
@@ -1093,11 +1086,11 @@ public class MainActivity extends AppCompatActivity {
         weekNextButton = new ImageButton(this);
         weekNextButton.setImageResource(R.drawable.ic_chevron_right);
         weekNextButton.setImageTintList(ColorStateList.valueOf(accentColor()));
-        weekNextButton.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+        weekNextButton.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         weekNextButton.setContentDescription("下一周");
         weekNextButton.setBackground(elevatedCardBackground(cardColor(), dp(14)));
         weekNextButton.setElevation(dp(ELEVATION_SOFT));
-        weekNextButton.setPadding(dp(9), dp(9), dp(9), dp(9));
+        weekNextButton.setPadding(dp(8), dp(8), dp(8), dp(8));
         weekNextButton.setOnClickListener(view -> { if (weekPickerDialog != null) weekPickerDialog.dismiss(); stepViewingWeek(1); });
         LinearLayout.LayoutParams weekNextParams = new LinearLayout.LayoutParams(dp(TOUCH_TARGET_DP), dp(TOUCH_TARGET_DP));
         weekNextParams.setMargins(dp(4), 0, dp(4), 0);
@@ -1228,9 +1221,10 @@ public class MainActivity extends AppCompatActivity {
         row.setPadding(0, 0, dp(6), 0);
         android.widget.ImageView icon = new android.widget.ImageView(this);
         icon.setImageResource(resource);
-        icon.setImageTintList(ColorStateList.valueOf(secondaryTextColor()));
+        icon.setImageTintList(ColorStateList.valueOf(metaIconColor(secondaryTextColor())));
+        icon.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(13), dp(13));
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(META_ICON_DP), dp(META_ICON_DP));
         iconParams.rightMargin = dp(5);
         row.addView(icon, iconParams);
         row.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -2071,6 +2065,10 @@ public class MainActivity extends AppCompatActivity {
         return icon;
     }
 
+    private int metaIconColor(int textColor) {
+        return mixColor(textColor, primaryTextColor(), 0.22f);
+    }
+
     /** 卡片详情里的一个「线性图标 + 文本」小组，用于地点 / 教师。 */
     private LinearLayout detailGroup(int iconResId, String text, int color, boolean first) {
         LinearLayout group = new LinearLayout(this);
@@ -2086,9 +2084,8 @@ public class MainActivity extends AppCompatActivity {
         }
         group.setLayoutParams(groupParams);
 
-        // 图标与字号都收到 11：时间轴改成"时间+圆点"同行后 gutter 加宽到 50dp，
-        // 详情行必须再紧一档，才能把"锡科503"这类地点完整放下。
-        group.addView(iconView(iconResId, color, META_ICON_DP, dp(4)));
+        // Keep meta icons slightly stronger than text; long text uses ellipsis.
+        group.addView(iconView(iconResId, metaIconColor(color), META_ICON_DP, dp(4)));
 
         TextView label = new TextView(this);
         label.setText(text);
@@ -2392,18 +2389,17 @@ public class MainActivity extends AppCompatActivity {
         name.setEllipsize(TextUtils.TruncateAt.END);
         info.addView(name);
 
-        // 时间行：线性时钟 + 时间。照示意图不加药丸底色，也不在这里塞周次
-        // （周次已挪到下面的详情行，与地点、教师并排）。
+        // The pale time pill wraps only its clock and complete time range.
         LinearLayout timeRow = new LinearLayout(this);
         timeRow.setOrientation(LinearLayout.HORIZONTAL);
         timeRow.setGravity(Gravity.CENTER_VERTICAL);
         // 效果图里时间文字下面垫着一层极淡的圆角底
         timeRow.setPadding(dp(7), dp(3), dp(9), dp(3));
         timeRow.setBackground(buttonBackground(
-                active ? Color.argb(56, 255, 255, 255) : tonalContainerColor(), dp(9)));
+                active ? Color.argb(40, 255, 255, 255) : mixColor(accentColor(), cardColor(), 0.95f), dp(9)));
 
         int timeFg = accentColor();
-        timeRow.addView(iconView(R.drawable.ic_clock_outline, timeFg, 12, dp(4)));
+        timeRow.addView(iconView(R.drawable.ic_clock_outline, timeFg, META_ICON_DP, dp(4)));
 
         TextView time = new TextView(this);
         time.setText(periodRangeTime(course));
@@ -2416,7 +2412,7 @@ public class MainActivity extends AppCompatActivity {
         timeRow.addView(time);
 
         LinearLayout.LayoutParams timeParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
         timeParams.setMargins(0, dp(6), 0, 0);
@@ -2460,7 +2456,7 @@ public class MainActivity extends AppCompatActivity {
         ImageButton edit = new ImageButton(this);
         edit.setImageResource(R.drawable.ic_more_horizontal);
         edit.setImageTintList(ColorStateList.valueOf(primaryTextColor()));
-        edit.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+        edit.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
         // 近白卡片上纯色圆块对比不足，看不出是个按钮；改用"白底 + 1dp 细描边 + 轻阴影"，
         // 与示意图里那颗浮起的白圆一致。当前课现在也是浅底，所以两种状态共用同一种做法。
         edit.setBackground(elevatedCardBackground(cardColor(), dp(18)));
@@ -3506,9 +3502,9 @@ public class MainActivity extends AppCompatActivity {
         ImageView icon = new ImageView(this);
         icon.setImageResource(iconResId);
         icon.setImageTintList(ColorStateList.valueOf(tintColor));
-        icon.setScaleType(ImageView.ScaleType.CENTER);
+        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
         icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        iconSurface.addView(icon, new FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER));
+        iconSurface.addView(icon, new FrameLayout.LayoutParams(dp(HEADER_ICON_DP), dp(HEADER_ICON_DP), Gravity.CENTER));
         LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(40), dp(40));
         iconParams.setMargins(0, 0, dp(12), 0);
         row.addView(iconSurface, iconParams);
@@ -3544,7 +3540,8 @@ public class MainActivity extends AppCompatActivity {
         arrow.setImageResource(R.drawable.ic_chevron_right);
         arrow.setImageTintList(ColorStateList.valueOf(secondaryTextColor()));
         arrow.setAlpha(0.72f);
-        arrow.setScaleType(ImageView.ScaleType.CENTER);
+        arrow.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        arrow.setPadding(dp(4), dp(12), dp(4), dp(12));
         arrow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         row.addView(arrow, new LinearLayout.LayoutParams(dp(24), dp(40)));
 
@@ -3564,9 +3561,9 @@ public class MainActivity extends AppCompatActivity {
         ImageView icon = new ImageView(this);
         icon.setImageResource(iconResId);
         icon.setImageTintList(ColorStateList.valueOf(tintColor));
-        icon.setScaleType(ImageView.ScaleType.CENTER);
+        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
         icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        iconSurface.addView(icon, new FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER));
+        iconSurface.addView(icon, new FrameLayout.LayoutParams(dp(HEADER_ICON_DP), dp(HEADER_ICON_DP), Gravity.CENTER));
         LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(40), dp(40));
         iconParams.setMargins(0, 0, dp(12), 0);
         row.addView(iconSurface, iconParams);
