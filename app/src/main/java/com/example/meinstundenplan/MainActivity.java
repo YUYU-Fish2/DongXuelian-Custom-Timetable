@@ -116,7 +116,11 @@ public class MainActivity extends AppCompatActivity {
     // 课程卡片右下角小插画的透明度。
     // 按反馈"要像 Hero 一样凸显"，已提到接近满不透明；素材端也把饱和/对比拉了一档。
     // 插画绘制在文字下层，且位于右下角，长文本省略时也不会盖住可读内容。
-    private static final float COURSE_ART_ALPHA = 0.95f;
+    private static final float COURSE_ART_ALPHA_NORMAL = 0.45f;
+    private static final float COURSE_ART_ALPHA_COMPLETED = 0.30f;
+    // Instrumentation-only overrides; ignored outside the isolated debug validation package.
+    private long uiValidationNowMillis;
+    private float uiValidationArtAlpha = -1f;
 
     // ─────────────────────────────────────────────────────────────────────
     // 设计 token（brief §1 / §10）。统一收在这里，不要再往 buildLayout 里散写常量。
@@ -238,6 +242,7 @@ public class MainActivity extends AppCompatActivity {
     private View daySelectionSlider;
     private LinearLayout dayTabs;
     private LinearLayout courseList;
+    private ScrollView pageScroll;
     private TextView summaryText;
     // 「下一节」胶囊（brief §7 三层）：容器 + 四段子视图
     private LinearLayout statusChip;
@@ -872,6 +877,7 @@ public class MainActivity extends AppCompatActivity {
         addPageDecorations(safeFrame);
 
         ScrollView pageScroll = new ScrollView(this);
+        this.pageScroll = pageScroll;
         pageScroll.setFillViewport(true);
         pageScroll.setVerticalScrollBarEnabled(false);
         pageScroll.setClipChildren(true);
@@ -1229,7 +1235,7 @@ public class MainActivity extends AppCompatActivity {
             countdown = "剩余 " + minutes + " min";
         } else if (nextToday) {
             label = "下一节";
-            long minutes = Math.max(1, (next.startAtMillis - System.currentTimeMillis() + 59999) / 60000);
+            long minutes = Math.max(1, (next.startAtMillis - uiNowMillis() + 59999) / 60000);
             countdown = minutes + " min 后";
         } else {
             boolean hadToday = false;
@@ -2156,11 +2162,11 @@ public class MainActivity extends AppCompatActivity {
             ));
         }
 
-        // 插画浓度：所有卡片（含当前课）统一用 COURSE_ART_ALPHA（0.95），
+        // 插画浓度按普通/已结束状态分别使用冻结的设计 Token，
         // 与预览模式一致；不再按 active 压低，也不再上色滤镜（色滤会把水彩变成单色剪影）。
         android.widget.ImageView courseArt = new android.widget.ImageView(this);
         courseArt.setImageResource(courseArtResId(course));
-        courseArt.setAlpha(COURSE_ART_ALPHA);
+        courseArt.setAlpha(courseArtAlpha(completed));
         courseArt.setScaleType(android.widget.ImageView.ScaleType.FIT_END);
         courseArt.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         FrameLayout.LayoutParams artParams = new FrameLayout.LayoutParams(
@@ -2356,9 +2362,7 @@ public class MainActivity extends AppCompatActivity {
         // 已完成课程不再压灰罩，靠"时间轴圆点降饱和 + 插画减淡"区分。
         // 插画减淡原来取 0.10（实测等于隐形，用户照片里三张卡两张看不到图案），
         // 提到 0.40：仍明显弱于普通卡的 0.95，但图案能认出来。
-        if (completed) {
-            courseArt.setAlpha(0.40f);
-        }
+
         boolean approaching = temporalState == TimetableRules.TemporalState.REMINDER_WINDOW;
         boolean shakeEnabled = approaching && animationsEnabled();
         if (shakeEnabled) {
@@ -2751,8 +2755,24 @@ public class MainActivity extends AppCompatActivity {
         return (now - start) / (float) (end - start);
     }
 
+    private boolean isolatedVisualValidation() {
+        return BuildConfig.ENABLE_TEST_COURSE && getPackageName().endsWith(".validation");
+    }
+
+    private long uiNowMillis() {
+        return isolatedVisualValidation() && uiValidationNowMillis > 0
+                ? uiValidationNowMillis : System.currentTimeMillis();
+    }
+
+    private float courseArtAlpha(boolean completed) {
+        if (isolatedVisualValidation() && uiValidationArtAlpha >= 0)
+            return Math.max(0f, Math.min(1f, uiValidationArtAlpha));
+        return completed ? COURSE_ART_ALPHA_COMPLETED : COURSE_ART_ALPHA_NORMAL;
+    }
+
     private int currentSeconds() {
         Calendar calendar = Calendar.getInstance();
+        calendar.setTimeInMillis(uiNowMillis());
         return calendar.get(Calendar.HOUR_OF_DAY) * 3600
                 + calendar.get(Calendar.MINUTE) * 60
                 + calendar.get(Calendar.SECOND);
@@ -2760,6 +2780,7 @@ public class MainActivity extends AppCompatActivity {
 
     private int currentMinutes() {
         Calendar calendar = Calendar.getInstance();
+        calendar.setTimeInMillis(uiNowMillis());
         return calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE);
     }
 
@@ -4734,6 +4755,7 @@ public class MainActivity extends AppCompatActivity {
 
     private long startOfTodayMillis() {
         Calendar calendar = Calendar.getInstance();
+        calendar.setTimeInMillis(uiNowMillis());
         calendar.set(Calendar.HOUR_OF_DAY, 0);
         calendar.set(Calendar.MINUTE, 0);
         calendar.set(Calendar.SECOND, 0);
@@ -4814,7 +4836,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private SummaryCourse nextUpcomingCourseFromToday() {
-        long now = System.currentTimeMillis();
+        long now = uiNowMillis();
         Course next = null;
         long nextStartAt = Long.MAX_VALUE;
         int totalWeeks = Math.min(calendarTotalWeeks(), TimetableRules.MAX_WEEK);
@@ -4902,7 +4924,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private int currentSchoolDay() {
-        int dayOfWeek = Calendar.getInstance().get(Calendar.DAY_OF_WEEK);
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTimeInMillis(uiNowMillis());
+        int dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK);
         return dayOfWeek == Calendar.SUNDAY ? 6 : dayOfWeek - Calendar.MONDAY;
     }
 

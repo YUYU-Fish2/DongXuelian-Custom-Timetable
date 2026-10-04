@@ -27,12 +27,16 @@ public final class DeviceValidationRunner extends Instrumentation {
     private final StringBuilder report = new StringBuilder();
     private boolean visualBaseline;
     private boolean statusMatrix;
+    private boolean referenceScene;
+    private String artAlpha;
     private interface Checked { void run() throws Exception; }
 
     @Override public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
         visualBaseline = arguments != null && "true".equals(arguments.getString("visualBaseline"));
         statusMatrix = arguments != null && "true".equals(arguments.getString("statusMatrix"));
+        referenceScene = arguments != null && "true".equals(arguments.getString("referenceScene"));
+        artAlpha = arguments == null ? null : arguments.getString("artAlpha");
         start();
     }
 
@@ -293,7 +297,7 @@ public final class DeviceValidationRunner extends Instrumentation {
     /** Screenshot fixtures are confined to the isolated instrumentation target. */
     private void captureVisualBaseline() throws Exception {
         Calendar start = Calendar.getInstance();
-        start.set(2026, Calendar.SEPTEMBER, 28, 0, 0, 0);
+        start.set(2026, referenceScene ? Calendar.AUGUST : Calendar.SEPTEMBER, referenceScene ? 31 : 28, 0, 0, 0);
         start.set(Calendar.MILLISECOND, 0);
         Calendar end = (Calendar) start.clone();
         end.add(Calendar.WEEK_OF_YEAR, 17);
@@ -305,12 +309,19 @@ public final class DeviceValidationRunner extends Instrumentation {
                 "com.example.meinstundenplan.MainActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         waitForIdleSync();
         onMain(() -> {
+            if (referenceScene) {
+                Calendar fixed = Calendar.getInstance(); fixed.set(2026, Calendar.OCTOBER, 1, 13, 59, 0);
+                fixed.set(Calendar.MILLISECOND, 0);
+                set(activity, "uiValidationNowMillis", fixed.getTimeInMillis());
+                if (artAlpha != null) set(activity, "uiValidationArtAlpha", Float.parseFloat(artAlpha));
+            }
             courses().clear();
             int[] begins = {480, 600, 870};
             int[] ends = {580, 700, 970};
             for (int i = 0; i < 3; i++) {
                 Object item = course(100 + i, i == 0 ? "离散数学" : "数据结构", "1-17周", i * 2 + 1, i * 2 + 2);
-                set(item, "day", 6);
+                set(item, "day", referenceScene ? 3 : 6);
+                if (referenceScene) set(item, "color", new int[]{0xff3e8590, 0xffbb8072, 0xff9876af}[i]);
                 set(item, "room", i == 2 ? "锡科301" : "锡科503");
                 set(item, "teacher", "罗志坚");
                 set(item, "customStartMinutes", begins[i]);
@@ -318,11 +329,25 @@ public final class DeviceValidationRunner extends Instrumentation {
                 courses().add(item);
             }
             call("saveCourses");
-            set(activity, "selectedDay", 6);
+            set(activity, "selectedDay", referenceScene ? 3 : 6);
             set(activity, "viewingWeek", 0);
             call("render");
         });
+        if (referenceScene) {
+            waitForIdleSync();
+            onMain(() -> {
+                check(((android.widget.TextView) field(activity, "statusChipCountdown")).getText().toString()
+                        .equals("31 min 后"), "Frozen UI clock not applied");
+                if (artAlpha != null) ((android.widget.ScrollView) field(activity, "pageScroll"))
+                        .scrollTo(0, (int) call("dp", 140));
+            });
+        }
         screenshot("baseline_home.png");
+        if (referenceScene) {
+            screenshot("reference.png");
+            passed++; report.append("PASS frozen-scene: 2026-10-01 13:59, preset=0, Thursday, top scroll\n");
+            return;
+        }
         if (statusMatrix) {
             for (int state = 0; state < 8; state++) {
                 final int scenario = state;
@@ -342,8 +367,16 @@ public final class DeviceValidationRunner extends Instrumentation {
     private void screenshot(String name) throws Exception {
         waitForIdleSync();
         SystemClock.sleep(900);
+        check(!getTargetContext().getSystemService(android.app.KeyguardManager.class).isKeyguardLocked(),
+                "Unlock the phone before visual validation");
         android.graphics.Bitmap bitmap = getUiAutomation().takeScreenshot();
         check(bitmap != null, "Screenshot unavailable: " + name);
+        boolean visible = false;
+        for (int y = 1; y < 8; y++) for (int x = 1; x < 8; x++) {
+            int pixel = bitmap.getPixel(bitmap.getWidth() * x / 8, bitmap.getHeight() * y / 8);
+            if ((pixel & 0x00ffffff) != 0) visible = true;
+        }
+        check(visible, "Black screenshot; visual validation cannot pass");
         java.io.File directory = new java.io.File(getTargetContext().getExternalFilesDir(null), "ui-baseline");
         check(directory.isDirectory() || directory.mkdirs(), "Cannot create screenshot directory");
         try (java.io.FileOutputStream output = new java.io.FileOutputStream(new java.io.File(directory, name))) {
