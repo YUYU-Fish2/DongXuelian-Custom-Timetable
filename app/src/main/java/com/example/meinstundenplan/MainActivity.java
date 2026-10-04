@@ -109,7 +109,10 @@ public class MainActivity extends AppCompatActivity {
     // Hero 区角色插画。置 false 即回到"无人物版"：去掉人物后版式依然完整可编译。
     private static final boolean SHOW_HERO_CHARACTER = true;
     // Hero 高度硬上限：不超过屏高的 22%，避免压缩课表可视空间。
-    private static final int HERO_CHARACTER_MAX_HEIGHT_DP = 174;
+    private static final int HERO_CHARACTER_MAX_HEIGHT_DP = 150;
+    private static final float HERO_TARGET_HEIGHT_RATIO = 0.19f;
+    // Initial visual scale; validate cropping within the approved 1.18–1.26 range.
+    private static final float HERO_SCENE_SCALE = 1.22f;
     // 课程卡片右下角小插画的透明度。
     // 按反馈"要像 Hero 一样凸显"，已提到接近满不透明；素材端也把饱和/对比拉了一档。
     // 插画绘制在文字下层，且位于右下角，长文本省略时也不会盖住可读内容。
@@ -746,7 +749,7 @@ public class MainActivity extends AppCompatActivity {
     private void addHeroScene(FrameLayout safeFrame, boolean compact) {
         float density = getResources().getDisplayMetrics().density;
         int screenHeightDp = Math.round(getResources().getDisplayMetrics().heightPixels / density);
-        int heroHeightDp = Math.min(Math.round(screenHeightDp * 0.22f), HERO_CHARACTER_MAX_HEIGHT_DP);
+        int heroHeightDp = Math.min(Math.round(screenHeightDp * HERO_TARGET_HEIGHT_RATIO), HERO_CHARACTER_MAX_HEIGHT_DP);
 
         // 整张 Hero 图：窗 + 天空 + 云 + 白花 + 人物都在同一张画里，光照统一，不需要再分层。
         // 素材落库前已做四边羽化 + 底边大幅渐隐，所以直接铺满顶部，无需再叠天空渐变。
@@ -767,7 +770,7 @@ public class MainActivity extends AppCompatActivity {
         int bleedSidePx = dp(compact ? 12 : 20);
         FrameLayout.LayoutParams sceneParams = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(Math.round(heroHeightDp * 1.36f)) + bleedTopPx,
+                dp(Math.round(heroHeightDp * HERO_SCENE_SCALE)) + bleedTopPx,
                 Gravity.TOP);
         sceneParams.topMargin = -bleedTopPx;
         sceneParams.leftMargin = -bleedSidePx;
