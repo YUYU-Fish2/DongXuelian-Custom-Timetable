@@ -168,6 +168,7 @@ public final class DeviceValidationRunner extends Instrumentation {
             }));
             test("header-cross-month", () -> onMain(() -> checkDateHeader("Asia/Shanghai", 2026, 8, 28, 1, 6, "10月4日", "9.28–10.4")));
             test("header-cross-year", () -> onMain(() -> checkDateHeader("Asia/Shanghai", 2026, 11, 28, 1, 6, "1月3日", "12.28–1.3")));
+            test("day-tabs-final-week", () -> onMain(() -> checkDateHeader("Asia/Shanghai", 2026, 11, 28, 18, 6, "5月2日", "4.26–5.2")));
             test("header-spring-DST", () -> onMain(() -> checkDateHeader("America/New_York", 2026, 2, 2, 2, 0, "3月9日", "3.9–3.15")));
             test("header-fall-DST", () -> onMain(() -> checkDateHeader("America/New_York", 2026, 9, 26, 2, 0, "11月2日", "11.2–11.8")));
             test("header-semester-statuses", () -> onMain(() -> {
@@ -176,6 +177,18 @@ public final class DeviceValidationRunner extends Instrumentation {
                 checkStatusCard(7);
                 check(((android.widget.TextView) field(activity, "summaryText")).getText().toString().startsWith("假期 · "), "Vacation heading lost");
             }));
+            test("day-tab-selection", () -> {
+                onMain(() -> {
+                    checkDateHeader("Asia/Shanghai", 2026, 8, 28, 1, 6, "10月4日", "9.28–10.4");
+                    ((android.view.ViewGroup) field(activity, "dayTabs")).getChildAt(1).performClick();
+                });
+                SystemClock.sleep(650); waitForIdleSync();
+                onMain(() -> {
+                    check((int) field(activity, "selectedDay") == 1, "Tab click did not select Tuesday");
+                    check(((android.widget.TextView) field(activity, "summaryText")).getText().toString()
+                            .equals("第1周 · 周二 · 9月29日"), "Tab/header dates disagree");
+                });
+            });
         } catch (Throwable error) { failed++; report.append("FATAL ").append(error).append('\n'); }
         finally {
             try { if (isolatedTarget) {
@@ -212,6 +225,20 @@ public final class DeviceValidationRunner extends Instrumentation {
                     .equals("第" + week + "周 · " + days[day] + " · " + expectedDate), "Wrong date heading");
             check(((android.widget.TextView) field(activity, "weekRangeText")).getText().toString()
                     .equals(expectedRange), "Wrong displayed week range");
+            android.view.ViewGroup tabs = (android.view.ViewGroup) field(activity, "dayTabs");
+            check(tabs.getChildCount() == 7, "Seven-day tabs lost");
+            android.view.ViewGroup selected = (android.view.ViewGroup) tabs.getChildAt(day);
+            check(selected.getChildCount() >= 3 && selected.getChildAt(1) instanceof android.widget.TextView,
+                    "Date row missing from day tab");
+            check(((android.widget.TextView) selected.getChildAt(1)).getText().toString()
+                    .equals(expectedDate.replace("月", "/").replace("日", "")), "Tab date disagrees with heading");
+            Calendar displayed = (Calendar) start.clone();
+            displayed.add(Calendar.DAY_OF_YEAR, (week - 1) * 7 + day);
+            Calendar today = Calendar.getInstance();
+            today.set(Calendar.HOUR_OF_DAY, 0); today.set(Calendar.MINUTE, 0);
+            today.set(Calendar.SECOND, 0); today.set(Calendar.MILLISECOND, 0);
+            check(selected.getContentDescription().toString().contains("今天")
+                    == (displayed.getTimeInMillis() == today.getTimeInMillis()), "Wrong natural-day today marker");
         } finally { TimeZone.setDefault(original); }
     }
     private void checkStatusCard(int state) throws Exception {
@@ -257,6 +284,9 @@ public final class DeviceValidationRunner extends Instrumentation {
         boolean detail = state == 0 || state == 1 || state == 2 || state == 3 || state == 6;
         check((name.getVisibility() == android.view.View.VISIBLE) == detail, "Stale course detail");
         if (!detail) check(name.getText().length() == 0, "Hidden stale course name");
+        android.view.ViewGroup tabs = (android.view.ViewGroup) field(activity, "dayTabs");
+        boolean markedToday = tabs.getChildAt(day).getContentDescription().toString().contains("今天");
+        check(markedToday == (state != 5 && state != 6 && state != 7), "Today marker ignores displayed date");
         android.widget.TextView date = (android.widget.TextView) field(activity, "statusChipDate");
         check((date.getVisibility() == android.view.View.VISIBLE) == (state == 2 || state == 3 || state == 6), "Future date visibility wrong");
     }

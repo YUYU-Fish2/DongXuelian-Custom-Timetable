@@ -1535,7 +1535,9 @@ public class MainActivity extends AppCompatActivity {
     private void renderDayTabs() {
         dayTabs.removeAllViews();
         boolean compact = isCompactWidth();
-        int today = currentSchoolDay();
+        int week = displayedViewingWeek();
+        long today = startOfTodayMillis();
+        SimpleDateFormat dateFormat = new SimpleDateFormat("M/d", Locale.CHINA);
         for (int i = 0; i < DAYS.length; i++) {
             final int day = i;
             LinearLayout tabContainer = new LinearLayout(this);
@@ -1545,7 +1547,8 @@ public class MainActivity extends AppCompatActivity {
 
             // 状态：今天用深蓝色，选中用青绿色
             int textColor;
-            boolean isToday = day == today;
+            long displayedDate = displayedDateMillis(week, day);
+            boolean isToday = displayedDate == today;
             boolean isSelected = day == selectedDay;
 
             if (isSelected) {
@@ -1558,7 +1561,7 @@ public class MainActivity extends AppCompatActivity {
 
             tabContainer.setBackground(buttonBackground(Color.TRANSPARENT, dp(18)));
             tabContainer.setSelected(isSelected);
-            tabContainer.setContentDescription(DAYS[i]
+            tabContainer.setContentDescription(DAYS[i] + "，" + formatDate(displayedDate)
                     + (isToday ? "\uff0c\u4eca\u5929" : "")
                     + (isSelected ? "\uff0c\u5df2\u9009\u62e9" : ""));
             tabContainer.setOnClickListener(view -> switchToDay(day));
@@ -1571,6 +1574,19 @@ public class MainActivity extends AppCompatActivity {
             dayText.setTextColor(textColor);
             tabContainer.addView(dayText);
 
+            TextView dateText = new TextView(this);
+            dateText.setText(dateFormat.format(new java.util.Date(displayedDate)));
+            dateText.setTextSize(12);
+            dateText.setTypeface(appTypefaceMedium());
+            dateText.setGravity(Gravity.CENTER);
+            dateText.setTextColor(textColor);
+            dateText.setIncludeFontPadding(false);
+            dateText.setSingleLine(true);
+            LinearLayout.LayoutParams dateParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            dateParams.topMargin = dp(2);
+            tabContainer.addView(dateText, dateParams);
+
             // 今天添加小圆点指示器，颜色跟随文字状态
             View todayMarker = new View(this);
             int markerColor = isSelected ? accentColor() : todayColor();
@@ -1579,7 +1595,9 @@ public class MainActivity extends AppCompatActivity {
             markerParams.setMargins(0, dp(4), 0, 0);
             tabContainer.addView(todayMarker, markerParams);
 
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(compact ? 62 : 70), dp(compact ? 48 : 52));
+            tabContainer.setMinimumHeight(dp(compact ? 64 : 68));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    dp(compact ? 62 : 70), ViewGroup.LayoutParams.WRAP_CONTENT);
             params.setMargins(0, 0, dp(2), 0);
             dayTabs.addView(tabContainer, params);
         }
