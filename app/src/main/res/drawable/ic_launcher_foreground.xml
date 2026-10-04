@@ -1,27 +1,6 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path
-        android:fillColor="#173A4A"
-        android:pathData="M37,13 H37 Q41,13 41,17 V30 Q41,34 37,34 H37 Q33,34 33,30 V17 Q33,13 37,13 Z" />
-    <path
-        android:fillColor="#173A4A"
-        android:pathData="M71,13 H71 Q75,13 75,17 V30 Q75,34 71,34 H71 Q67,34 67,30 V17 Q67,13 71,13 Z" />
-    <path
-        android:fillColor="#FFFDF7"
-        android:pathData="M40,24 H68 Q82,24 82,38 V70 Q82,84 68,84 H40 Q26,84 26,70 V38 Q26,24 40,24 Z" />
-    <path
-        android:fillColor="#F9D978"
-        android:pathData="M40,24 H68 Q82,24 82,38 V45 H26 V38 Q26,24 40,24 Z" />
-    <path
-        android:fillColor="#CFE6E7"
-        android:pathData="M36.5,51 H71.5 Q75,51 75,54.5 V54.5 Q75,58 71.5,58 H36.5 Q33,58 33,54.5 V54.5 Q33,51 36.5,51 Z" />
-    <path
-        android:fillColor="#F9D978"
-        android:pathData="M36.5,62 H71.5 Q75,62 75,65.5 V65.5 Q75,69 71.5,69 H36.5 Q33,69 33,65.5 V65.5 Q33,62 36.5,62 Z" />
-    <path
-        android:fillColor="#CFE6E7"
-        android:pathData="M36.5,73 H56.5 Q60,73 60,76.5 V76.5 Q60,80 56.5,80 H36.5 Q33,80 33,76.5 V76.5 Q33,73 36.5,73 Z" />
-</vector>
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="21dp" android:insetTop="21dp"
+    android:insetRight="21dp" android:insetBottom="21dp">
+    <bitmap android:src="@drawable/ic_launcher_art"
+        android:gravity="fill" android:filter="true" />
+</inset>
