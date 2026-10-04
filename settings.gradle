@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MeinStundenplan"
+rootProject.name = "DongXuelianCustomTimetable"
 include ":app"
