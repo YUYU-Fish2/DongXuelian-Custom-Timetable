@@ -25,14 +25,23 @@ public final class DeviceValidationRunner extends Instrumentation {
     private boolean isolatedTarget;
     private int passed, failed, skipped;
     private final StringBuilder report = new StringBuilder();
+    private boolean visualBaseline;
     private interface Checked { void run() throws Exception; }
 
-    @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); start(); }
+    @Override public void onCreate(Bundle arguments) {
+        super.onCreate(arguments);
+        visualBaseline = arguments != null && "true".equals(arguments.getString("visualBaseline"));
+        start();
+    }
 
     @Override public void onStart() {
         try {
             check(getTargetContext().getPackageName().endsWith(".validation"), "Refusing production package");
             isolatedTarget = true;
+            if (visualBaseline) {
+                captureVisualBaseline();
+                return;
+            }
             SharedPreferences prefs = prefs();
             Calendar today = Calendar.getInstance();
             today.set(Calendar.HOUR_OF_DAY, 0); today.set(Calendar.MINUTE, 0);
@@ -155,6 +164,59 @@ public final class DeviceValidationRunner extends Instrumentation {
         int before = skipped;
         try { body.run(); if (skipped == before) { passed++; report.append("PASS ").append(name).append('\n'); } }
         catch (Throwable error) { failed++; report.append("FAIL ").append(name).append(": ").append(error).append('\n'); }
+    }
+    /** Screenshot fixtures are confined to the isolated instrumentation target. */
+    private void captureVisualBaseline() throws Exception {
+        Calendar start = Calendar.getInstance();
+        start.set(2026, Calendar.SEPTEMBER, 28, 0, 0, 0);
+        start.set(Calendar.MILLISECOND, 0);
+        Calendar end = (Calendar) start.clone();
+        end.add(Calendar.WEEK_OF_YEAR, 17);
+        check(prefs().edit().clear().putBoolean("calendar_initialized", true)
+                .putBoolean("notifications_enabled", false).putInt("accent_preset", 0)
+                .putLong("calendar_start_millis", start.getTimeInMillis())
+                .putLong("calendar_end_millis", end.getTimeInMillis()).commit(), "Cannot seed visual fixture");
+        activity = startActivitySync(new Intent().setClassName(getTargetContext().getPackageName(),
+                "com.example.meinstundenplan.MainActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        waitForIdleSync();
+        onMain(() -> {
+            courses().clear();
+            int[] begins = {480, 600, 870};
+            int[] ends = {580, 700, 970};
+            for (int i = 0; i < 3; i++) {
+                Object item = course(100 + i, i == 0 ? "离散数学" : "数据结构", "1-17周", i * 2 + 1, i * 2 + 2);
+                set(item, "day", 6);
+                set(item, "room", i == 2 ? "锡科301" : "锡科503");
+                set(item, "teacher", "罗志坚");
+                set(item, "customStartMinutes", begins[i]);
+                set(item, "customEndMinutes", ends[i]);
+                courses().add(item);
+            }
+            call("saveCourses");
+            set(activity, "selectedDay", 6);
+            set(activity, "viewingWeek", 0);
+            call("render");
+        });
+        screenshot("baseline_home.png");
+        onMain(() -> call("showSettingsDialogV2"));
+        screenshot("baseline_settings.png");
+        onMain(() -> ((android.view.View) field(activity, "settingsOverlay")).performClick());
+        onMain(() -> call("showCourseDialog", courses().get(1)));
+        screenshot("baseline_course_edit.png");
+        passed++;
+        report.append("PASS visual-baseline: 3 screenshots; fixed Sunday courses, preset=0\n");
+    }
+    private void screenshot(String name) throws Exception {
+        waitForIdleSync();
+        SystemClock.sleep(900);
+        android.graphics.Bitmap bitmap = getUiAutomation().takeScreenshot();
+        check(bitmap != null, "Screenshot unavailable: " + name);
+        java.io.File directory = new java.io.File(getTargetContext().getExternalFilesDir(null), "ui-baseline");
+        check(directory.isDirectory() || directory.mkdirs(), "Cannot create screenshot directory");
+        try (java.io.FileOutputStream output = new java.io.FileOutputStream(new java.io.File(directory, name))) {
+            check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output), "Screenshot encode failed");
+        } finally { bitmap.recycle(); }
+        report.append("CAPTURE ").append(name).append(" at ").append(new java.util.Date()).append('\n');
     }
     private SharedPreferences prefs() { return getTargetContext().getSharedPreferences("timetable", Context.MODE_PRIVATE); }
     private void onMain(Checked action) throws Exception {
