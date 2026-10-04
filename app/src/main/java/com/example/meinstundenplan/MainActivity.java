@@ -923,7 +923,9 @@ public class MainActivity extends AppCompatActivity {
         summaryText.setTextSize(18);
         summaryText.setTypeface(appTypeface(Typeface.BOLD));
         summaryText.setAlpha(1f);
-        summaryText.setSingleLine(true);
+        summaryText.setSingleLine(false);
+        summaryText.setMaxLines(2);
+        summaryText.setMaxWidth(dp(212));
         summaryText.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams summaryParams = new LinearLayout.LayoutParams(
                 compact ? ViewGroup.LayoutParams.MATCH_PARENT : ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -1109,8 +1111,8 @@ public class MainActivity extends AppCompatActivity {
                 withAlpha(accentColor(), isDarkMode ? 64 : 34), dp(14)));
         weekLiveBadge.setOnClickListener(view -> returnToCurrentWeek());
         weekLiveBadge.setVisibility(View.GONE);
-        header.addView(weekLiveBadge, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, dp(44), Gravity.START | Gravity.BOTTOM));
+        weekNavRow.addView(weekLiveBadge, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)));
 
         HorizontalScrollView dayScroll = new HorizontalScrollView(this);
         this.dayScroll = dayScroll;
@@ -1947,8 +1949,12 @@ public class MainActivity extends AppCompatActivity {
             currentTimeOverlay.setVisibility(View.GONE); return;
         }
         long now = uiNowMillis();
-        for (Course course : timelineCourses) if (courseEndMinutes(course) <= courseStartMinutes(course)) {
+        int previousStart = -1;
+        for (Course course : timelineCourses) {
+            if (courseStartMinutes(course) < previousStart || courseEndMinutes(course) <= courseStartMinutes(course)) {
             currentTimeOverlay.setVisibility(View.GONE); return;
+            }
+            previousStart = courseStartMinutes(course);
         }
         currentTimeInGap = false;
         currentTimeY = timelineAnchorBottom(timelineRows.size() - 1);

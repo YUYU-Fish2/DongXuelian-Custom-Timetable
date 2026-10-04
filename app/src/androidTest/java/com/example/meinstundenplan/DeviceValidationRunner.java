@@ -346,6 +346,7 @@ public final class DeviceValidationRunner extends Instrumentation {
         }
         screenshot("baseline_home.png");
         if (referenceScene) {
+            test("layout-and-touch-audit", this::auditMeasuredLayout);
             screenshot("reference.png");
             if (timelineMatrix) checkTimelineMatrix();
             passed++; report.append("PASS frozen-scene: 2026-10-01 13:59, preset=0, Thursday, top scroll\n");
@@ -367,6 +368,52 @@ public final class DeviceValidationRunner extends Instrumentation {
         passed++;
         report.append("PASS visual-baseline: 3 screenshots; fixed Sunday courses, preset=0\n");
     }
+    private void auditMeasuredLayout() throws Exception {
+        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        AtomicReference<Throwable> error = new AtomicReference<>();
+        onMain(() -> {
+            android.view.View root = activity.getWindow().getDecorView();
+            root.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+                @Override public boolean onPreDraw() {
+                    root.getViewTreeObserver().removeOnPreDrawListener(this);
+                    try { auditLayout(root); } catch (Throwable failure) { error.set(failure); }
+                    finally { done.countDown(); }
+                    return true;
+                }
+            });
+            root.requestLayout(); root.invalidate();
+        });
+        check(done.await(5, java.util.concurrent.TimeUnit.SECONDS), "Layout audit timed out");
+        if (error.get() != null) throw new Exception(error.get());
+    }
+
+    private void auditLayout(android.view.View view) throws Exception {
+        if (view.getVisibility() != android.view.View.VISIBLE) return;
+        if (view instanceof android.widget.TextView) {
+            android.widget.TextView text = (android.widget.TextView) view;
+            String value = text.getText().toString();
+            android.text.Layout layout = text.getLayout();
+            boolean requiredFull = view == field(activity, "summaryText") || view == field(activity, "statusChipCountdown")
+                    || value.matches("[0-9]{2}:[0-9]{2}([–-][0-9]{2}:[0-9]{2})?");
+            if (requiredFull && !value.isEmpty()) {
+                check(layout != null && layout.getLineCount() > 0, "Missing layout: " + value);
+                for (int i = 0; i < layout.getLineCount(); i++) check(layout.getEllipsisCount(i) == 0, "Clipped text: " + value);
+                check(layout.getLineBottom(layout.getLineCount() - 1) <= text.getHeight() - text.getCompoundPaddingTop() - text.getCompoundPaddingBottom() + 1,
+                        "Vertical text clipping: " + value);
+            }
+        }
+        if (view instanceof android.widget.FrameLayout && view.isClickable()
+                && view.getImportantForAccessibility() != android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO) {
+            int minimum = (int) call("dp", 44);
+            check(view.getWidth() >= minimum && view.getHeight() >= minimum, "Small touch target: " + view.getContentDescription());
+            check(view.getContentDescription() != null, "Missing action description");
+        }
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) auditLayout(group.getChildAt(i));
+        }
+    }
+
     private void checkTimelineMatrix() throws Exception {
         final float[] positions = new float[5];
         int[] minutes = {455, 540, 780, 920, 1000};
