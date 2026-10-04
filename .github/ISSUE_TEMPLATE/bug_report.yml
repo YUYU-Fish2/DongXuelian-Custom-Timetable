@@ -1,0 +1,29 @@
+name: 问题反馈
+description: 报告崩溃、显示异常或课程功能问题
+title: "[问题] "
+body:
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本
+      placeholder: 例如 1.3.0-preview
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: 手机型号与 Android 版本
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 描述操作、期望结果和实际结果。若方便，可附截图。
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: 补充信息
+      description: 日期、屏幕字体比例或导入文件类型等。请遮盖个人信息，不要上传真实课表 PDF 或签名文件。
