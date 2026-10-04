@@ -17,12 +17,20 @@ public class ClassReminderReceiver extends BroadcastReceiver {
     static final String EXTRA_COURSE_TIME = "course_time";
     static final String EXTRA_COURSE_ROOM = "course_room";
     static final String EXTRA_REMINDER_MINUTES = "reminder_minutes";
+    static final String EXTRA_DEBUG_REMINDER = "debug_reminder";
 
     @Override
     public void onReceive(Context context, Intent intent) {
+        if (intent == null) {
+            return;
+        }
         // Continue the chain before attempting to post. A denied notification permission must not
         // make every later reminder for the course unreachable.
-        ReminderScheduler.scheduleNextFromBroadcast(context, intent);
+        boolean debugReminder = BuildConfig.ENABLE_TEST_COURSE
+                && intent.getBooleanExtra(EXTRA_DEBUG_REMINDER, false);
+        if (!debugReminder && !ReminderScheduler.scheduleNextFromBroadcast(context, intent)) {
+            return;
+        }
 
         if (Build.VERSION.SDK_INT >= 33
                 && context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)

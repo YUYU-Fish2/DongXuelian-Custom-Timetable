@@ -105,8 +105,6 @@ public class MainActivity extends AppCompatActivity {
     private static final long COUNTDOWN_REFRESH_MS = 1000L;
     private static final int COUNTDOWN_SECONDS_THRESHOLD = 5 * 60;
     private static final int COUNTDOWN_ANIMATION_MS = 260;
-    private static final long MILLIS_PER_DAY = 24L * 60L * 60L * 1000L;
-    private static final long MILLIS_PER_WEEK = 7L * MILLIS_PER_DAY;
     private static final int CONTENT_SIDE_MARGIN_DP = 28;
     // Hero 区角色插画。置 false 即回到"无人物版"：去掉人物后版式依然完整可编译。
     private static final boolean SHOW_HERO_CHARACTER = true;
@@ -1309,8 +1307,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String weekRangeLabel(int week) {
-        long start = calendarStartMillis() + (long) (week - 1) * MILLIS_PER_WEEK;
-        long end = start + 6L * MILLIS_PER_DAY;
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTimeInMillis(calendarStartMillis());
+        calendar.add(Calendar.DAY_OF_YEAR, (week - 1) * 7);
+        long start = calendar.getTimeInMillis();
+        calendar.add(Calendar.DAY_OF_YEAR, 6);
+        long end = calendar.getTimeInMillis();
         SimpleDateFormat format = new SimpleDateFormat("M.d", Locale.CHINA);
         return "第" + week + "周 · " + format.format(new java.util.Date(start))
                 + "–" + format.format(new java.util.Date(end));
@@ -3958,7 +3960,9 @@ public class MainActivity extends AppCompatActivity {
         course.endPeriod = period;
         course.room = "\u6a21\u62df\u5668\u6d4b\u8bd5";
         int minutes = reminderLeadMinutes(course);
-        new ClassReminderReceiver().onReceive(this, classReminderIntent(course));
+        Intent testIntent = classReminderIntent(course);
+        testIntent.putExtra(ClassReminderReceiver.EXTRA_DEBUG_REMINDER, true);
+        new ClassReminderReceiver().onReceive(this, testIntent);
         showClassReminderPopup(course.name, periodRangeTime(course), course.room, minutes);
         Toast.makeText(this, "\u5df2\u53d1\u9001\u4e00\u6761\u6d4b\u8bd5\u901a\u77e5", Toast.LENGTH_SHORT).show();
     }
@@ -4190,7 +4194,7 @@ public class MainActivity extends AppCompatActivity {
 
     @SuppressLint("ApplySharedPref") // 依赖 commit 返回值判断校历保存成败，不能改 apply
     private void saveAcademicCalendar(String name, long startMillis, long endMillis) {
-        int totalWeeks = Math.max(1, (int) ((endMillis - startMillis) / MILLIS_PER_WEEK) + 1);
+        int totalWeeks = Math.max(1, (int) (TimetableRules.daysBetweenDates(startMillis, endMillis) / 7) + 1);
         boolean committed = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
                 .edit()
                 .putLong(CALENDAR_START_KEY, startMillis)
@@ -4308,6 +4312,12 @@ public class MainActivity extends AppCompatActivity {
                 StringBuilder skipLog = new StringBuilder();
 
                 for (Course parsed : parsedCourses) {
+                    if (parsed.period < 1 || parsed.endPeriod < parsed.period
+                            || parsed.endPeriod > periodCount()) {
+                        skipped++;
+                        skipLog.append(parsed.name).append(": 节次超出当前设置，请重新导入\n");
+                        continue;
+                    }
                     if (courses.size() >= MAX_COURSES) {
                         skipped++;
                         skipLog.append(parsed.name).append(": 达到上限\n");
@@ -4318,6 +4328,11 @@ public class MainActivity extends AppCompatActivity {
                     if (hasImportedCourseDuplicate(parsed)) {
                         skipped++;
                         skipLog.append(parsed.name).append(": 已存在\n");
+                        continue;
+                    }
+                    if (hasCourseConflict(parsed)) {
+                        skipped++;
+                        skipLog.append(parsed.name).append(": 与已有课程的节次和周次冲突\n");
                         continue;
                     }
                     courses.add(parsed);
@@ -4664,7 +4679,7 @@ public class MainActivity extends AppCompatActivity {
         if (today > calendarEndMillis()) {
             return calendarTotalWeeks() + 1;
         }
-        return (int) ((today - start) / MILLIS_PER_WEEK) + 1;
+        return (int) (TimetableRules.daysBetweenDates(start, today) / 7) + 1;
     }
 
     private int calendarTotalWeeks() {
@@ -4673,7 +4688,7 @@ public class MainActivity extends AppCompatActivity {
         if (end < start) {
             return 20;
         }
-        return Math.max(1, (int) ((end - start) / MILLIS_PER_WEEK) + 1);
+        return Math.max(1, (int) (TimetableRules.daysBetweenDates(start, end) / 7) + 1);
     }
 
     private long calendarStartMillis() {
@@ -4712,7 +4727,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private Long parseDateMillis(String value) {
-        if (value == null) {
+        if (value == null || !value.trim().matches("\\d{4}-\\d{2}-\\d{2}")) {
             return null;
         }
         try {

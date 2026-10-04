@@ -1,0 +1,196 @@
+package com.example.meinstundenplan;
+
+import java.text.SimpleDateFormat;
+import java.util.*;
+
+/** Host harness: production method bodies are inserted by the PS1 runner. */
+public final class ActivityLogicRegressionTest {
+    private static final long MILLIS_PER_DAY = 86400000L;
+    private static final long MILLIS_PER_WEEK = 7L * MILLIS_PER_DAY;
+    private long calendarStart, calendarEnd, today;
+    private long calendarStartMillis() { return calendarStart; }
+    private long calendarEndMillis() { return calendarEnd; }
+    private long startOfTodayMillis() { return today; }
+    private final List<Course> courses = new ArrayList<>();
+    private static final int MAX_COURSES = 200;
+    private int periodCount() { return 11; }
+    private int chooseCourseColorForDay(int day, long ignoredId) { return 0; }
+    private boolean sameCourseText(String left, String right) {
+        return TimetableRules.normalizedCourseText(left).equals(TimetableRules.normalizedCourseText(right));
+    }
+
+    private static final String EXTRA_REQUEST_CODE = "request", EXTRA_GENERATION = "generation",
+            EXTRA_TRIGGER_AT = "trigger", EXTRA_COURSE_NAME = "name", EXTRA_COURSE_TIME = "time",
+            EXTRA_COURSE_ROOM = "room", EXTRA_REMINDER_MINUTES = "minutes",
+            EXTRA_DEBUG_REMINDER = "debug", CHANNEL_ID = "channel";
+    private static ScheduleData schedule;
+    private static int submitted;
+    private static boolean scheduleFirstFuture(Context c, Entry e, long after, long generation) {
+        submitted++;
+        return true;
+    }
+    private static ScheduleData loadSchedule(Context c) { return schedule; }
+    private static void recordSubmissionResult(Context c, boolean success) {}
+    private static void ensureChannel(NotificationManager manager) {}
+
+    /* ACTUAL_METHODS */
+
+    public static void main(String[] args) throws Exception {
+        TimeZone original = TimeZone.getDefault();
+        int failures = 0;
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("Asia/Shanghai"));
+            ActivityLogicRegressionTest app = new ActivityLogicRegressionTest();
+            failures += run("date suffix", () -> check(app.parseDateMillis("2026-03-02junk") == null,
+                    "Trailing garbage accepted as a calendar date"));
+            failures += run("date width", () -> check(app.parseDateMillis("2026-3-2") == null,
+                    "Non YYYY-MM-DD date accepted"));
+            failures += run("valid dates", () -> {
+                check(app.parseDateMillis("2026-02-30") == null, "Impossible date accepted");
+                check(app.parseDateMillis("2024-02-29") != null, "Leap day rejected");
+                check(app.parseDateMillis(" 2026-03-02 ") != null, "Trimmed valid date rejected");
+            });
+            TimeZone.setDefault(TimeZone.getTimeZone("America/New_York"));
+            app.calendarStart = date(2026, Calendar.MARCH, 2);
+            app.calendarEnd = date(2026, Calendar.MARCH, 16);
+            app.today = date(2026, Calendar.MARCH, 9);
+            failures += run("DST current week", () -> check(app.currentTeachingWeek() == 2,
+                    "Spring DST moves Monday into week " + app.currentTeachingWeek()));
+            failures += run("DST total weeks", () -> check(app.calendarTotalWeeks() == 3,
+                    "Spring DST loses the final teaching week"));
+            failures += run("DST week label", () -> check(app.weekRangeLabel(2).equals("第2周 · 3.9–3.15"),
+                    "Wrong week label: " + app.weekRangeLabel(2)));
+            app.calendarStart = date(2026, Calendar.OCTOBER, 26);
+            app.calendarEnd = date(2026, Calendar.NOVEMBER, 9);
+            app.today = date(2026, Calendar.NOVEMBER, 2);
+            failures += run("fall DST week label", () -> check(app.weekRangeLabel(2).equals("第2周 · 11.2–11.8"),
+                    "Fall DST shifts labels to the preceding Sunday: " + app.weekRangeLabel(2)));
+            failures += run("current reminder", () -> assertReminder(7, 1, true));
+            failures += run("stale reminder", () -> assertReminder(6, 1, false));
+            failures += run("removed course reminder", () -> assertReminder(7, 2, false));
+            failures += run("null reminder", () -> {
+                Context c = new Context();
+                new ActivityLogicRegressionTest().onReceive(c, null);
+                check(c.manager.notified == 0, "Null intent posted a notification");
+            });
+            failures += run("conflict boundaries", () -> {
+                Course saved = new Course(1, 0, 1, 2, "1-16周单周");
+                app.courses.add(saved);
+                check(app.hasCourseConflict(new Course(2, 0, 2, 3, "1-16周")), "Overlap missed");
+                check(!app.hasCourseConflict(new Course(2, 0, 3, 4, "1-16周")), "Adjacent periods conflict");
+                check(!app.hasCourseConflict(new Course(2, 0, 1, 2, "2-16周双周")), "Odd/even conflict");
+            });
+            failures += run("import conflict", () -> {
+                Course imported = new Course(2, 0, 2, 3, "1-16周");
+                imported.name = "Different course";
+                int count = app.courses.size();
+                check(app.importCourses(Arrays.asList(imported)) == 0, "Import bypassed the conflict check");
+                check(app.courses.size() == count, "Conflicting course was stored");
+            });
+            failures += run("import different weeks", () -> {
+                Course imported = new Course(3, 0, 1, 2, "2-16周双周");
+                imported.name = "Even weeks";
+                check(app.importCourses(Arrays.asList(imported)) == 1, "Nonoverlapping import rejected");
+            });
+            failures += run("import changed period rules", () -> {
+                Course imported = new Course(4, 1, 12, 12, "1-16周");
+                imported.name = "Period beyond current rules";
+                check(app.importCourses(Arrays.asList(imported)) == 0, "Outdated parsed periods were imported");
+            });
+        } finally {
+            TimeZone.setDefault(original);
+        }
+        if (failures > 0) throw new AssertionError(failures + " activity regression cases failed");
+        System.out.println("ActivityLogicRegressionTest: all 15 cases passed");
+    }
+
+    private static void assertReminder(long generation, int requestCode, boolean expected) {
+        schedule = new ScheduleData(7, new Entry(1));
+        submitted = 0;
+        Context c = new Context();
+        Intent intent = new Intent().putExtra(EXTRA_GENERATION, generation)
+                .putExtra(EXTRA_REQUEST_CODE, requestCode).putExtra(EXTRA_COURSE_NAME, "Math");
+        new ActivityLogicRegressionTest().onReceive(c, intent);
+        check(c.manager.notified == (expected ? 1 : 0), "Obsolete notification was delivered");
+        check(submitted == (expected ? 1 : 0), "Wrong reminder chain advancement");
+    }
+    private static long date(int year, int month, int day) {
+        Calendar c = Calendar.getInstance(); c.clear(); c.set(year, month, day);
+        return c.getTimeInMillis();
+    }
+    private static int run(String name, Runnable test) {
+        try { test.run(); System.out.println("PASS: " + name); return 0; }
+        catch (Throwable error) { System.out.println("FAIL: " + name + ": " + error); return 1; }
+    }
+    private static void check(boolean condition, String message) {
+        if (!condition) throw new AssertionError(message);
+    }
+
+    // Only Android/persistence boundaries are faked; validation and receiver flow are real.
+    static class Course {
+        long id; int day, period, endPeriod, color; String weeks;
+        String name = "Saved course", room = "", teacher = ""; boolean temporary;
+        Course(long id, int day, int period, int endPeriod, String weeks) {
+            this.id = id; this.day = day; this.period = period; this.endPeriod = endPeriod; this.weeks = weeks;
+        }
+    }
+    static class Entry { final int requestCode; Entry(int code) { requestCode = code; } }
+    static class ScheduleData {
+        final long generation; final Entry entry;
+        ScheduleData(long g, Entry e) { generation = g; entry = e; }
+        Entry entryForRequestCode(int code) { return entry != null && entry.requestCode == code ? entry : null; }
+    }
+    static class ReminderScheduler {
+        static final String EXTRA_REQUEST_CODE = ActivityLogicRegressionTest.EXTRA_REQUEST_CODE;
+        static boolean scheduleNextFromBroadcast(Context c, Intent i) { /* SCHEDULER_BRIDGE */ }
+    }
+    static class Build { static class VERSION { static int SDK_INT = 23; } }
+    static class BuildConfig { static final boolean ENABLE_TEST_COURSE = false; }
+    static class PackageManager { static final int PERMISSION_GRANTED = 0; }
+    static class android { static class Manifest { static class permission {
+        static final String POST_NOTIFICATIONS = "notifications";
+    } } }
+    static class Context {
+        static final String NOTIFICATION_SERVICE = "notification";
+        final NotificationManager manager = new NotificationManager();
+        Object getSystemService(String service) { return manager; }
+        int checkSelfPermission(String permission) { return 0; }
+    }
+    static class Intent {
+        static final int FLAG_ACTIVITY_NEW_TASK = 1, FLAG_ACTIVITY_CLEAR_TOP = 2, FLAG_ACTIVITY_SINGLE_TOP = 4;
+        final Map<String, Object> extras = new HashMap<>();
+        Intent() {} Intent(Context c, Class<?> target) {}
+        Intent putExtra(String key, Object value) { extras.put(key, value); return this; }
+        long getLongExtra(String key, long fallback) { Object v = extras.get(key); return v instanceof Number ? ((Number)v).longValue() : fallback; }
+        int getIntExtra(String key, int fallback) { Object v = extras.get(key); return v instanceof Number ? ((Number)v).intValue() : fallback; }
+        String getStringExtra(String key) { return (String)extras.get(key); }
+        boolean getBooleanExtra(String key, boolean fallback) { Object v = extras.get(key); return v instanceof Boolean ? (Boolean)v : fallback; }
+        void setFlags(int flags) {} void setData(Object uri) {}
+    }
+    static class Uri { static Object parse(String text) { return text; } }
+    static class PendingIntent {
+        static final int FLAG_UPDATE_CURRENT = 1, FLAG_IMMUTABLE = 2;
+        static PendingIntent getActivity(Context c, int code, Intent i, int flags) { return new PendingIntent(); }
+    }
+    static class MainActivity {
+        static final String EXTRA_SHOW_REMINDER_POPUP = "popup", EXTRA_REMINDER_COURSE_NAME = "course",
+                EXTRA_REMINDER_COURSE_TIME = "time", EXTRA_REMINDER_COURSE_ROOM = "room", EXTRA_REMINDER_LEAD_MINUTES = "lead";
+        static int accentColorFor(Context c) { return 0; }
+    }
+    static class R { static class drawable { static final int ic_launcher_foreground = 1; } }
+    static class NotificationManager { int notified; void notify(int id, Notification n) { notified++; } }
+    static class Notification {
+        static final String CATEGORY_REMINDER = "reminder";
+        static final int DEFAULT_SOUND = 1, DEFAULT_VIBRATE = 2, PRIORITY_HIGH = 1, VISIBILITY_PUBLIC = 1;
+        static class BigTextStyle { BigTextStyle bigText(String s) { return this; } }
+        static class Builder {
+            Builder(Context c) {} Builder(Context c, String channel) {}
+            Builder setSmallIcon(int i) { return this; } Builder setContentTitle(String s) { return this; }
+            Builder setContentText(String s) { return this; } Builder setStyle(BigTextStyle s) { return this; }
+            Builder setContentIntent(PendingIntent p) { return this; } Builder setAutoCancel(boolean b) { return this; }
+            Builder setColor(int i) { return this; } Builder setCategory(String s) { return this; }
+            Builder setDefaults(int i) { return this; } Builder setPriority(int i) { return this; }
+            Builder setVisibility(int i) { return this; } Notification build() { return new Notification(); }
+        }
+    }
+}

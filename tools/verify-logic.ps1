@@ -24,13 +24,22 @@ New-Item -ItemType Directory -Force -Path $logicOut, $androidOut | Out-Null
     (Join-Path $root "app\src\main\java\com\example\meinstundenplan\ImportException.java") `
     (Join-Path $root "app\src\main\java\com\example\meinstundenplan\PdfCourseParser.java") `
     (Join-Path $root "tools\TimetableRulesTest.java") `
-    (Join-Path $root "tools\PdfCourseParserTest.java")
+    (Join-Path $root "tools\PdfCourseParserTest.java") `
+    (Join-Path $root "app\src\androidTest\java\com\example\meinstundenplan\BugRegressionTest.java")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 & $java -cp $logicOut com.example.meinstundenplan.TimetableRulesTest
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 & $java -cp $logicOut com.example.meinstundenplan.PdfCourseParserTest
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+foreach ($case in @("ascii", "hex", "period", "compressed", "encoding")) {
+    & $java -cp $logicOut com.example.meinstundenplan.BugRegressionTest $case
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+
+& (Join-Path $PSScriptRoot "ActivityLogicRegressionTest.ps1")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $sources = Get-ChildItem -LiteralPath (Join-Path $root "app\src\main\java") -Recurse -Filter *.java |

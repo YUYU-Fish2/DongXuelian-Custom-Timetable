@@ -57,19 +57,21 @@ final class ReminderScheduler {
         recordSubmissionResult(context, submitted);
     }
 
-    static void scheduleNextFromBroadcast(Context context, Intent deliveredIntent) {
+    // Return whether the delivered occurrence still belongs to the active schedule.
+    // A failure to submit its successor should not suppress the current notification.
+    static boolean scheduleNextFromBroadcast(Context context, Intent deliveredIntent) {
         if (deliveredIntent == null) {
-            return;
+            return false;
         }
         int requestCode = deliveredIntent.getIntExtra(EXTRA_REQUEST_CODE, 0);
         long generation = deliveredIntent.getLongExtra(EXTRA_GENERATION, Long.MIN_VALUE);
         ScheduleData current = loadSchedule(context);
         if (generation != current.generation) {
-            return;
+            return false;
         }
         Entry entry = current.entryForRequestCode(requestCode);
         if (entry == null) {
-            return;
+            return false;
         }
         long deliveredAt = deliveredIntent.getLongExtra(EXTRA_TRIGGER_AT, 0L);
         boolean submitted = scheduleFirstFuture(
@@ -79,6 +81,7 @@ final class ReminderScheduler {
                 current.generation
         );
         recordSubmissionResult(context, submitted);
+        return true;
     }
 
     @SuppressLint("ApplySharedPref") // 保存 tombstone 失败时兜底清空，必须同步落盘，避免下次启动恢复旧提醒

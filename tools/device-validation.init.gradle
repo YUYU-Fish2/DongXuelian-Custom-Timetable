@@ -1,0 +1,18 @@
+// This applies only when explicitly passed with --init-script.
+gradle.beforeProject { project ->
+    project.plugins.withId('com.android.application') {
+        def android = project.extensions.getByName('android')
+        android.defaultConfig.testInstrumentationRunner = 'com.example.meinstundenplan.DeviceValidationRunner'
+        android.defaultConfig.testApplicationId = 'com.example.meinstundenplan.validation.test'
+        android.buildTypes.debug.applicationIdSuffix = '.validation'
+        project.tasks.register('checkDeviceValidationConfig') {
+            doLast {
+                assert android.buildTypes.debug.applicationIdSuffix == '.validation'
+                assert android.defaultConfig.testInstrumentationRunner == 'com.example.meinstundenplan.DeviceValidationRunner'
+                def tests = android.sourceSets.androidTest.java.sourceFiles.files.collect { it.name }.sort()
+                assert tests == ['BugRegressionTest.java', 'DeviceValidationRunner.java'] : tests
+                println 'Isolated device-test configuration verified.'
+            }
+        }
+    }
+}

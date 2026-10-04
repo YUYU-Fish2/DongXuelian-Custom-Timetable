@@ -128,6 +128,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\build-verify.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\security-audit.ps1
 ```
 
+`verify-logic.ps1` 还运行 PDF/节次边界回归测试和 `ActivityLogicRegressionTest.ps1`。
+后者抽取实际 Java 方法和导入循环到 JVM 测试壳中，验证日期、夏令时、导入冲突与旧提醒过滤，
+仅替换 Android 系统和持久化边界；它不替代真机上的通知、Keystore 或界面测试。
+
 脚本不写死任何本机路径：JDK 取 `JAVA_HOME`，SDK 取 `ANDROID_HOME` 或 `local.properties`
 里的 `sdk.dir`，Gradle 缓存取 `GRADLE_USER_HOME`（默认 `~/.gradle`）。
 
@@ -154,6 +158,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-release.ps1
 按 `versionName` 生成 `dist/mein-stundenplan-v<版本>/` 与同名 zip，仅包含可发布的源码、
 Gradle Wrapper、文档与脚本；keystore、密码、`local.properties`、构建产物、真实课表 PDF
 都会被主动拒绝打包。
+
+## 真机回归验证
+
+执行 `tools/verify-device.ps1 -Jdk '<JDK 路径>' -Sdk '<SDK 路径>'`，脚本会使用
+独立包名 `.validation` 构建和安装测试版，避免覆盖原课表。手机上的安装、通知权限提示
+需要确认；精确闹钟权限未开启时，系统定时提醒测试会明确标为跳过。
+
+2026-10-04 在 RMX3700 / Android 16 上完成 15 项测试，全部通过。
+覆盖范围和复跑方法见 [真机验证记录](docs/device-validation-2026-10-04.md)。
 
 ## 常见问题
 
