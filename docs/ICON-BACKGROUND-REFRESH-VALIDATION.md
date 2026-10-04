@@ -6,7 +6,7 @@ User plan: ICON-BACKGROUND-REFRESH-PLAN.md. Continue ui/v2-refresh from 448337c.
 - RB2 accepted: transparent mint/peach/lavender flowers and books selected by existing card color. Fixed fixture screenshot inspected; isolated build/device layout audit and host 21 cases passed. Final alpha tuning remains RB7.
 - RB3 accepted: new rounded clock, soft pin, simplified person and rounded calendar vectors; uniform 24 viewport/1.8 stroke. Build, fixed device screenshot/layout audit and host 21 cases passed.
 - RB4 accepted: smaller three dots, standard chevron, outlined slider knobs, centered 2.1 plus and refined sparkle. Build, fixed device screenshot/layout audit and host 21 cases passed.
-- RB5 pending: settings icons and separate notification/reminder semantics.
+- RB5 accepted: file with import arrow, notification bell/check badge, plain reminder bell, outline palette/trash and shared chevron. Settings/edit screenshots inspected; isolated build and host 21 cases passed.
 - RB6 pending: quiet edge/bottom watercolor assets.
 - RB7 pending: 14dp meta, 20dp header glyphs, colors/alpha and final validation.
 

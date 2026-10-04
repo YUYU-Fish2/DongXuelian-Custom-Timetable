@@ -3343,7 +3343,7 @@ public class MainActivity extends AppCompatActivity {
         ), settingsRowParams());
 
         panel.addView(settingsToggleRow(
-                R.drawable.ic_bell_status,
+                R.drawable.ic_bell,
                 "\u8bfe\u7a0b\u63d0\u9192",
                 "\u5f00\u542f\u540e\u6309\u8bfe\u8868\u5728\u4e0a\u8bfe\u524d\u53d1\u9001\u63d0\u9192\u901a\u77e5",
                 accentColor(),
