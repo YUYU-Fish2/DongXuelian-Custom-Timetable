@@ -37,11 +37,11 @@ $env:ANDROID_HOME = "<Android SDK 目录>"
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-apk.ps1
 ```
 
-APK 打包脚本读取本机构建结果，默认输出到 `dist/apk-v1.3.0/`，包含 `dongxuelian-timetable-v1.3.0-preview.apk`、其 ZIP 压缩包和 `SHA256SUMS.txt`。ZIP 还附有安装说明，安装时使用解压后的 APK。
+APK 打包脚本读取本机构建结果，默认输出到 `dist/apk-v1.3.1/`，包含 `dongxuelian-timetable-v1.3.1-preview.apk`、其 ZIP 压缩包和 `SHA256SUMS.txt`。ZIP 还附有安装说明，安装时使用解压后的 APK。
 
 Preview 使用本机 Android 调试证书。其他机器默认生成的调试证书可能不同；同包名的覆盖安装仍需使用同一证书。Release 未配置签名时会生成 `app-release-unsigned.apk`，不能直接安装。不要将未签名文件当作可安装发行包。
 
-`tools/package-release.ps1` 将已提交的干净工作区归档为完整源码 ZIP，包含文档与截图。存在未提交或未跟踪文件时会拒绝运行；已跟踪的密钥、本机配置、APK、构建缓存和 PDF 也会阻止打包。默认输出为 `dist/dongxuelian-timetable-v1.3.0-source.zip`。
+`tools/package-release.ps1` 将已提交的干净工作区归档为完整源码 ZIP，包含文档与截图。存在未提交或未跟踪文件时会拒绝运行；已跟踪的密钥、本机配置、APK、构建缓存和 PDF 也会阻止打包。默认输出为 `dist/dongxuelian-timetable-v1.3.1-source.zip`。
 
 ## 验证
 

@@ -6,9 +6,9 @@
 
 ## 下载
 
-从 [GitHub Releases](https://github.com/YUYU-Fish2/DongXuelian-Custom-Timetable/releases) 下载 APK。当前版本为 `1.3.0-preview`（`versionCode 6`）。
+从 [GitHub Releases](https://github.com/YUYU-Fish2/DongXuelian-Custom-Timetable/releases) 下载 APK。当前版本为 `1.3.1-preview`（`versionCode 7`）。
 
-- 日常试用选择 `dongxuelian-timetable-v1.3.0-preview.apk`，已进行代码压缩和资源裁剪。
+- 日常试用选择 `dongxuelian-timetable-v1.3.1-preview.apk`，已进行代码压缩和资源裁剪。
 - `.zip` 是同一个 APK 的压缩下载包，解压后安装。
 - `.validation` 和 AndroidTest 包用于开发验证，无需日常安装。
 
