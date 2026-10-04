@@ -898,9 +898,7 @@ public class MainActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(compact ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
-        header.setGravity(compact ? Gravity.START : Gravity.CENTER_VERTICAL);
+        FrameLayout header = new FrameLayout(this);
         LinearLayout.LayoutParams headerParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -910,10 +908,8 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout titleBlock = new LinearLayout(this);
         titleBlock.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams titleBlockParams = compact
-                ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                : new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        header.addView(titleBlock, titleBlockParams);
+        header.addView(titleBlock, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START));
 
         summaryText = new TextView(this);
         summaryText.setTextColor(primaryTextColor());
@@ -930,7 +926,7 @@ public class MainActivity extends AppCompatActivity {
         titleBlock.addView(summaryText, summaryParams);
 
         // P2: full-width information card below the Hero, with stable rows in every state.
-        header.setMinimumHeight(dp(HERO_CHARACTER_MAX_HEIGHT_DP));
+        header.setMinimumHeight(dp(110));
         statusChip = new LinearLayout(this);
         statusChip.setOrientation(LinearLayout.VERTICAL);
         statusChip.setPadding(dp(14), dp(12), dp(14), dp(12));
@@ -998,12 +994,9 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setGravity(compact ? Gravity.END | Gravity.CENTER_VERTICAL : Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams actionsParams = compact
-                ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        if (compact) {
-            actionsParams.setMargins(0, dp(76), 0, 0);
-        }
+        FrameLayout.LayoutParams actionsParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END | Gravity.BOTTOM);
+        actionsParams.bottomMargin = dp(4);
         header.addView(actions, actionsParams);
 
         // 主题切换按钮已移除：按用户指示去掉暗模式、只保留亮模式后，
@@ -1015,11 +1008,11 @@ public class MainActivity extends AppCompatActivity {
         settingsButton.setContentDescription("\u8bbe\u7f6e");
         settingsButton.setBackground(elevatedCardBackground(cardColor(), dp(ACTION_BUTTON_SIZE_DP / 2)));
         settingsButton.setElevation(dp(ELEVATION_SOFT));
-        settingsButton.setPadding(dp(11), dp(11), dp(11), dp(11));
+        settingsButton.setPadding(dp(7), dp(7), dp(7), dp(7));
         settingsButton.setOnClickListener(view -> showSettingsDialogV2());
-        LinearLayout.LayoutParams settingsParams = new LinearLayout.LayoutParams(dp(actionButtonSize), dp(actionButtonSize));
+        LinearLayout.LayoutParams settingsParams = new LinearLayout.LayoutParams(dp(44), dp(44));
         settingsParams.setMargins(0, 0, dp(10), 0);
-        actions.addView(settingsButton, settingsParams);
+        actions.addView(touchContainer(settingsButton, 38), settingsParams);
 
         ImageButton addButton = new ImageButton(this);
         addButton.setImageResource(R.drawable.ic_plus);
@@ -1031,7 +1024,7 @@ public class MainActivity extends AppCompatActivity {
         addButton.setElevation(dp(ELEVATION_SOFT));
         addButton.setPadding(dp(11), dp(11), dp(11), dp(11));
         addButton.setOnClickListener(view -> showCourseDialog(null));
-        actions.addView(addButton, new LinearLayout.LayoutParams(dp(actionButtonSize), dp(actionButtonSize)));
+        actions.addView(touchContainer(addButton, 42), new LinearLayout.LayoutParams(dp(44), dp(44)));
 
         LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -1046,8 +1039,9 @@ public class MainActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
-        weekNavParams.setMargins(dp(sideMargin), dp(compact ? 14 : 18), dp(sideMargin), dp(6));
-        root.addView(weekNavRow, weekNavParams);
+        weekNavParams.width = dp(216);
+        weekNavParams.setMargins(0, dp(2), 0, 0);
+        titleBlock.addView(weekNavRow, weekNavParams);
 
         weekPrevButton = new ImageButton(this);
         weekPrevButton.setImageResource(R.drawable.ic_chevron_right);
@@ -1060,9 +1054,9 @@ public class MainActivity extends AppCompatActivity {
         weekPrevButton.setElevation(dp(ELEVATION_SOFT));
         weekPrevButton.setPadding(dp(9), dp(9), dp(9), dp(9));
         weekPrevButton.setOnClickListener(view -> stepViewingWeek(-1));
-        LinearLayout.LayoutParams weekPrevParams = new LinearLayout.LayoutParams(dp(36), dp(36));
+        LinearLayout.LayoutParams weekPrevParams = new LinearLayout.LayoutParams(dp(44), dp(44));
         weekPrevParams.setMargins(0, 0, dp(4), 0);
-        weekNavRow.addView(weekPrevButton, weekPrevParams);
+        weekNavRow.addView(touchContainer(weekPrevButton, 32), weekPrevParams);
 
         weekRangeText = new TextView(this);
         weekRangeText.setTextSize(compact ? 13 : 14);
@@ -1072,8 +1066,9 @@ public class MainActivity extends AppCompatActivity {
         weekRangeText.setSingleLine(true);
         weekRangeText.setEllipsize(TextUtils.TruncateAt.END);
         weekRangeText.setIncludeFontPadding(false);
-        weekRangeText.setPadding(dp(8), dp(9), dp(8), dp(9));
-        weekRangeText.setBackground(interactiveSurfaceBackground(tonalContainerColor(), dp(14)));
+        weekRangeText.setPadding(dp(4), dp(4), dp(4), dp(4));
+        weekRangeText.setMinimumHeight(dp(44));
+        weekRangeText.setBackground(null);
         weekRangeText.setContentDescription("选择周次");
         weekRangeText.setOnClickListener(view -> showWeekPickerDialog());
         weekNavRow.addView(weekRangeText, new LinearLayout.LayoutParams(
@@ -1089,9 +1084,9 @@ public class MainActivity extends AppCompatActivity {
         weekNextButton.setElevation(dp(ELEVATION_SOFT));
         weekNextButton.setPadding(dp(9), dp(9), dp(9), dp(9));
         weekNextButton.setOnClickListener(view -> stepViewingWeek(1));
-        LinearLayout.LayoutParams weekNextParams = new LinearLayout.LayoutParams(dp(36), dp(36));
+        LinearLayout.LayoutParams weekNextParams = new LinearLayout.LayoutParams(dp(44), dp(44));
         weekNextParams.setMargins(dp(4), 0, dp(4), 0);
-        weekNavRow.addView(weekNextButton, weekNextParams);
+        weekNavRow.addView(touchContainer(weekNextButton, 32), weekNextParams);
 
         weekLiveBadge = new TextView(this);
         weekLiveBadge.setText("本周");
@@ -1101,14 +1096,14 @@ public class MainActivity extends AppCompatActivity {
         weekLiveBadge.setGravity(Gravity.CENTER);
         weekLiveBadge.setIncludeFontPadding(false);
         weekLiveBadge.setContentDescription("返回本周");
-        weekLiveBadge.setPadding(dp(11), dp(9), dp(11), dp(9));
+        weekLiveBadge.setPadding(dp(6), dp(4), dp(6), dp(4));
+        weekLiveBadge.setMinimumHeight(dp(44));
         weekLiveBadge.setBackground(interactiveTranslucentBackground(
                 withAlpha(accentColor(), isDarkMode ? 64 : 34), dp(14)));
         weekLiveBadge.setOnClickListener(view -> returnToCurrentWeek());
         weekLiveBadge.setVisibility(View.GONE);
-        weekNavRow.addView(weekLiveBadge, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ));
+        header.addView(weekLiveBadge, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(44), Gravity.START | Gravity.BOTTOM));
 
         HorizontalScrollView dayScroll = new HorizontalScrollView(this);
         this.dayScroll = dayScroll;
@@ -1182,6 +1177,18 @@ public class MainActivity extends AppCompatActivity {
             updateStatusChip(currentCourse, nextCourse, false);
         }
         renderedTemporalSignature = temporalSignature();
+    }
+
+    /** Separate visual size from the actual, accessible touch target. */
+    private FrameLayout touchContainer(ImageButton button, int visualSizeDp) {
+        FrameLayout target = new FrameLayout(this);
+        target.setMinimumWidth(dp(44)); target.setMinimumHeight(dp(44));
+        target.setContentDescription(button.getContentDescription());
+        target.setFocusable(true);
+        target.setOnClickListener(view -> { if (button.isEnabled()) button.performClick(); });
+        button.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        target.addView(button, new FrameLayout.LayoutParams(dp(visualSizeDp), dp(visualSizeDp), Gravity.CENTER));
+        return target;
     }
 
     private TextView statusChipText(int size, boolean prominent) {
@@ -1356,13 +1363,14 @@ public class MainActivity extends AppCompatActivity {
         weekRangeText.setText(displayedWeekRangeLabel(week));
         weekRangeText.setContentDescription("第" + week + "周，" + displayedWeekRangeLabel(week) + "，点击选择周次");
         weekRangeText.setTextColor(previewing ? accentColor() : primaryTextColor());
-        weekRangeText.setBackground(interactiveSurfaceBackground(
-                previewing ? accentContainerColor() : tonalContainerColor(), dp(14)));
+        weekRangeText.setBackground(null);
         boolean canPrev = week > 1;
         boolean canNext = week < total;
         weekPrevButton.setEnabled(canPrev);
+        ((View) weekPrevButton.getParent()).setEnabled(canPrev);
         weekPrevButton.setAlpha(canPrev ? 1f : 0.35f);
         weekNextButton.setEnabled(canNext);
+        ((View) weekNextButton.getParent()).setEnabled(canNext);
         weekNextButton.setAlpha(canNext ? 1f : 0.35f);
         weekLiveBadge.setVisibility(previewing ? View.VISIBLE : View.GONE);
     }
@@ -2341,12 +2349,12 @@ public class MainActivity extends AppCompatActivity {
         edit.setPadding(dp(8), dp(8), dp(8), dp(8));
         edit.setContentDescription("\u7f16\u8f91\u8bfe\u7a0b");
         edit.setOnClickListener(view -> showCourseDialog(course));
-        LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(dp(36), dp(36));
+        LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(dp(44), dp(44));
         // 水平 LinearLayout 中 layout_gravity 控制纵向位置：贴顶对齐，和示意图一致
         editParams.gravity = Gravity.TOP;
-        FrameLayout.LayoutParams overlayEditParams = new FrameLayout.LayoutParams(dp(36), dp(36), Gravity.TOP | Gravity.END);
-        overlayEditParams.setMargins(0, dp(8), dp(8), 0);
-        shell.addView(edit, overlayEditParams);
+        FrameLayout.LayoutParams overlayEditParams = new FrameLayout.LayoutParams(dp(44), dp(44), Gravity.TOP | Gravity.END);
+        overlayEditParams.setMargins(0, dp(4), dp(4), 0);
+        shell.addView(touchContainer(edit, 36), overlayEditParams);
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -3179,7 +3187,7 @@ public class MainActivity extends AppCompatActivity {
         scroller.addView(panel);
 
         panel.addView(settingsSectionLabel("\u8bfe\u8868"));
-        panel.addView(settingsMenuRow(R.drawable.ic_file_text, "\u5bfc\u5165 PDF \u8bfe\u8868", "\u4ece\u6587\u4ef6\u89e3\u6790\u8bfe\u7a0b\u3001\u5468\u6b21\u548c\u6559\u5ba4", accentColor(), view -> {
+        panel.addView(settingsMenuRow(R.drawable.ic_file_import, "\u5bfc\u5165 PDF \u8bfe\u8868", "\u4ece\u6587\u4ef6\u89e3\u6790\u8bfe\u7a0b\u3001\u5468\u6b21\u548c\u6559\u5ba4", accentColor(), view -> {
             dismissSettings[0].run();
             openPdfPicker();
         }), settingsRowParams());
@@ -3191,7 +3199,7 @@ public class MainActivity extends AppCompatActivity {
             }), settingsRowParams());
         }
         panel.addView(settingsMenuRow(
-                R.drawable.ic_bell,
+                R.drawable.ic_bell_status,
                 "通知状态",
                 notificationStatusText(),
                 accentColor(),
@@ -3202,7 +3210,7 @@ public class MainActivity extends AppCompatActivity {
         ), settingsRowParams());
 
         panel.addView(settingsToggleRow(
-                R.drawable.ic_bell,
+                R.drawable.ic_bell_status,
                 "\u8bfe\u7a0b\u63d0\u9192",
                 "\u5f00\u542f\u540e\u6309\u8bfe\u8868\u5728\u4e0a\u8bfe\u524d\u53d1\u9001\u63d0\u9192\u901a\u77e5",
                 accentColor(),
