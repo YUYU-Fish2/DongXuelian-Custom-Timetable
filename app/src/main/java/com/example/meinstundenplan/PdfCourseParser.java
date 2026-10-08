@@ -417,13 +417,15 @@ final class PdfCourseParser {
         PdfTextItem metadata = items.get(metadataIndex);
         if (metadataIndex > 0) {
             PdfTextItem previous = items.get(metadataIndex - 1);
-            if (sameRow(previous, metadata) && !sameColumn(previous, metadata)) {
+            if (looksLikeCourseNameLine(previous.text)
+                    && sameRow(previous, metadata) && !sameColumn(previous, metadata)) {
                 return true;
             }
         }
         if (metadataIndex + 1 < items.size()) {
             PdfTextItem next = items.get(metadataIndex + 1);
-            if (sameRow(next, metadata) && !sameColumn(next, metadata)) {
+            if (looksLikeCourseNameLine(next.text)
+                    && sameRow(next, metadata) && !sameColumn(next, metadata)) {
                 return true;
             }
         }

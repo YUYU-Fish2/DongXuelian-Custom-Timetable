@@ -20,6 +20,7 @@ public final class PdfCourseParserTest {
         testPeriodOutOfRangeSkipped();
         testMultiStreamParsed();
         testCrossPageNameLookup();
+        testCrossPageCourseWithAdjacentColumnRemainder();
         testStreamSizeLimitRejected();
         testCourseCountLimit();
         testLiteralEscapeInName();
@@ -126,6 +127,24 @@ public final class PdfCourseParserTest {
         check(c.day == 3, "course should map to Thursday, got " + c.day);
         check(c.room.equals("A101"), "room mismatch: " + c.room);
         check(c.teacher.equals("\u5f20\u4e09"), "teacher mismatch: " + c.teacher);
+    }
+
+    private static void testCrossPageCourseWithAdjacentColumnRemainder() throws Exception {
+        String page1Tail = "BT 1 0 0 1 415.62 22.5 Tm (计算机组成原理★) Tj ET";
+        String page2Head = "BT 1 0 0 1 311.77 567 Tm (/教师:上一门课程教师) Tj "
+                + "1 0 0 1 415.62 567 Tm (\\(7-8节\\)1-17周) Tj "
+                + "1 0 0 1 415.62 555 Tm (/场地:锡科611/教师:曹晴) Tj ET";
+        PdfCourseParser.ParseResult result = PdfCourseParser.parseCourses(
+                pdfWithStreams(stream(page1Tail), stream(page2Head)), MAX_PERIODS, MAX_STREAM, MAX_COURSES);
+        check(result.courses.size() == 1,
+                "cross-page course with adjacent-column remainder expected, got " + result.courses.size());
+        PdfCourseParser.ParsedCourse c = result.courses.get(0);
+        check(c.name.equals("计算机组成原理"), "name mismatch: " + c.name);
+        check(c.day == 3, "course should map to Thursday, got " + c.day);
+        check(c.period == 7 && c.endPeriod == 8, "period 7-8 expected, got " + c.period + "-" + c.endPeriod);
+        check(c.weeks.equals("1-17周"), "weeks mismatch: " + c.weeks);
+        check(c.room.equals("锡科611"), "room mismatch: " + c.room);
+        check(c.teacher.equals("曹晴"), "teacher mismatch: " + c.teacher);
     }
 
     private static void testStreamSizeLimitRejected() {
